@@ -3,7 +3,7 @@ Telegram message handlers.
 """
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
@@ -27,7 +27,8 @@ def fmt_tx(tx: Transaction) -> str:
     """Format transaction."""
     icon = CATEGORY_ICONS.get(tx.category, "❓")
     sign = "🔴" if tx.type == TransactionType.EXPENSE else "🟢"
-    return f"{sign} #{tx.id} | {icon} {tx.category}: {fmt(tx.amount)}đ\n   └ {tx.note or '-'}"
+    date_str = tx.transaction_date.strftime("%d/%m")
+    return f"{sign} #{tx.id} | {date_str} | {icon} {tx.category}: {fmt(tx.amount)}đ\n   └ {tx.note or '-'}"
 
 
 # ==================== Commands ====================
@@ -129,18 +130,34 @@ async def _handle_insert(message: Message, user_id: int, action: AIAction, _):
         await message.answer("🤔 Không hiểu số tiền. Thử: `ăn phở 50k`", parse_mode=ParseMode.MARKDOWN)
         return
     
+    # Use full message text as note for easy reference
+    full_note = message.text.strip()
+    
+    # Calculate target date from date_offset
+    tx_date = action.target_date or date.today()
+    
     tx_id = await db.insert(
         user_id=user_id,
         amount=action.amount,
         category=action.category or "Khác",
-        note=action.note or message.text,
-        tx_type=action.tx_type or TransactionType.EXPENSE
+        note=full_note,  # Full message as note
+        tx_type=action.tx_type or TransactionType.EXPENSE,
+        tx_date=tx_date
     )
     
     emoji = "💸" if action.tx_type == TransactionType.EXPENSE else "💰"
     icon = CATEGORY_ICONS.get(action.category or "Khác", "❓")
+    
+    # Format date info
+    date_info = ""
+    if action.date_offset > 0 or action.time_of_day:
+        date_str = tx_date.strftime("%d/%m")
+        time_str = f" {action.time_of_day}" if action.time_of_day else ""
+        date_info = f"📅 {date_str}{time_str}\n"
+    
     await message.answer(
         f"{emoji} **Đã ghi!**\n"
+        f"{date_info}"
         f"{icon} {action.category or 'Khác'} | 💵 {fmt(action.amount)}đ\n"
         f"✅ #{tx_id}",
         parse_mode=ParseMode.MARKDOWN

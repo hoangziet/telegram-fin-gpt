@@ -43,16 +43,28 @@ Bạn là trợ lý tài chính. Phân tích tin nhắn và trả về JSON acti
 {{
     "action": "<action>",
     "amount": <số tiền đã convert | null>,
-    "category": "<danh mục | null>",
-    "note": "<ghi chú | null>",
-    "type": "thu" | "chi" | null,
+    "category": "<danh mục>",
+    "type": "thu" | "chi",
+    "date_offset": <số ngày lùi lại từ hôm nay, 0=hôm nay, 1=hôm qua, 2=hôm kia>,
+    "time_of_day": "sáng" | "trưa" | "chiều" | "tối" | null,
     "transaction_id": <id | null>,
-    "time_hint": "<sáng|trưa|tối|hôm qua | null>",
-    "keyword": "<từ khóa | null>",
+    "keyword": "<từ khóa tìm | null>",
     "report_type": "day" | "week" | "month" | null,
     "limit": <số lượng | 10>,
-    "message": "<tin nhắn cho user | null>"
+    "message": "<phản hồi cho user | null>"
 }}
+
+**LƯU Ý QUAN TRỌNG:**
+- KHÔNG cần trả về "note" - hệ thống sẽ tự lưu toàn bộ tin nhắn gốc làm note
+
+**PHÂN TÍCH THỜI GIAN:**
+Ví dụ cách parse:
+- "ăn phở 50k" → date_offset: 0, time_of_day: null
+- "sáng nay cafe 35k" → date_offset: 0, time_of_day: "sáng"
+- "trưa qua cơm 55k" → date_offset: 1, time_of_day: "trưa"
+- "tối hôm kia nhậu 200k" → date_offset: 2, time_of_day: "tối"
+- "hôm qua mua đồ 100k" → date_offset: 1, time_of_day: null
+- "chiều nay grab 45k" → date_offset: 0, time_of_day: "chiều"
 
 **CATEGORIES:**
 Chi: {EXPENSE_CATEGORIES}
@@ -134,18 +146,22 @@ Thu: {INCOME_CATEGORIES}
             except ValueError:
                 report_type = ReportType.DAY
         
+        # Resolve date from date_offset
+        date_offset = data.get("date_offset", 0)
+        target_date = date.today() - timedelta(days=date_offset)
+        
         return AIAction(
             action=action,
             amount=data.get("amount"),
             category=data.get("category"),
-            note=data.get("note"),
             tx_type=tx_type,
+            date_offset=date_offset,
+            time_of_day=data.get("time_of_day"),
+            target_date=target_date,
             transaction_id=data.get("transaction_id"),
-            time_hint=data.get("time_hint"),
             keyword=data.get("keyword"),
             report_type=report_type,
             limit=data.get("limit", 10),
-            target_date=self._resolve_date(data.get("time_hint")),
             message=data.get("message")
         )
     

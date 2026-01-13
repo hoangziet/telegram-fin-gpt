@@ -46,18 +46,20 @@ class AIAction:
     action: ActionType
     amount: Optional[float] = None
     category: Optional[str] = None
-    note: Optional[str] = None
     tx_type: Optional[TransactionType] = None
+    
+    # Date/time - computed from AI's date_offset and time_of_day
+    date_offset: int = 0  # 0=today, 1=yesterday, 2=day before
+    time_of_day: Optional[str] = None  # sáng/trưa/chiều/tối
+    target_date: Optional[date] = None  # Resolved date
     
     # Reference for update/delete
     transaction_id: Optional[int] = None
-    time_hint: Optional[str] = None
     keyword: Optional[str] = None
     
     # Query/Report
     report_type: Optional[ReportType] = None
     limit: int = 10
-    target_date: Optional[date] = None
     
     # Response
     message: Optional[str] = None
