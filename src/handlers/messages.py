@@ -97,9 +97,20 @@ async def handle_text(message: Message):
     last_tx = await db.get_last(user_id)
     context = {"last_tx": last_tx} if last_tx else None
     
-    # Parse
-    action = await ai.parse(text, context)
-    logger.info(f"User {user_id}: {action.action.value}")
+    # Parse with error handling
+    try:
+        action = await ai.parse(text, context)
+        logger.info(f"User {user_id}: {action.action.value}")
+    except Exception as e:
+        logger.error(f"AI parse error: {e}")
+        await message.answer(
+            "🤔 Không hiểu tin nhắn. Thử:\n"
+            "• `ăn phở 50k` - ghi chi tiêu\n"
+            "• `hôm nay chi bao nhiêu` - xem báo cáo\n"
+            "• `/help` - xem hướng dẫn",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
     
     # Execute
     handlers = {
@@ -119,7 +130,7 @@ async def handle_text(message: Message):
         await handler(message, user_id, action, last_tx)
     else:
         await message.answer(
-            action.message or "🤔 Không hiểu. Thử: `ăn phở 50k`",
+            action.message or "🤔 Không hiểu. Thử: `ăn phở 50k` hoặc `/help`",
             parse_mode=ParseMode.MARKDOWN
         )
 
