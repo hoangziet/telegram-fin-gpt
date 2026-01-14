@@ -146,8 +146,10 @@ Thu: {INCOME_CATEGORIES}
             except ValueError:
                 report_type = ReportType.DAY
         
-        # Resolve date from date_offset
-        date_offset = data.get("date_offset", 0)
+        # Resolve date from date_offset (handle None from AI)
+        date_offset = data.get("date_offset") or 0
+        if not isinstance(date_offset, int):
+            date_offset = 0
         target_date = date.today() - timedelta(days=date_offset)
         
         return AIAction(
