@@ -24,9 +24,13 @@ logger = logging.getLogger(__name__)
 # Flask app for Replit Autoscale keep-alive
 app = Flask(__name__)
 
+# Register dashboard blueprint
+from src.web import dashboard
+app.register_blueprint(dashboard)
+
 @app.route("/")
 def home():
-    return "🤖 FinGPT Bot is running!"
+    return '🤖 FinGPT Bot is running! <a href="/login">Login to Dashboard</a>'
 
 @app.route("/health")
 def health():

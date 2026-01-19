@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+
+{% block title %}FinGPT - About{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto glass rounded-2xl p-8 text-center">
+    <div class="mb-6 inline-block p-4 rounded-full bg-slate-800/50">
+        <span class="text-4xl">🤖</span>
+    </div>
+    <h1 class="text-3xl font-bold mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        FinGPT V2
+    </h1>
+    <p class="text-slate-300 mb-8 leading-relaxed">
+        Trợ lý tài chính thông minh tích hợp AI, giúp bạn quản lý thu chi dễ dàng ngay trên Telegram.
+        <br>
+        Được xây dựng với Python, Flask, Supabase và Gemini AI.
+    </p>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-left mb-8">
+        <div class="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
+            <i data-lucide="zap" class="w-6 h-6 text-yellow-400 mb-2"></i>
+            <h3 class="font-semibold mb-1">AI Powered</h3>
+            <p class="text-xs text-slate-400">Tự động phân loại giao dịch từ tin nhắn tự nhiên.</p>
+        </div>
+        <div class="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
+            <i data-lucide="shield-check" class="w-6 h-6 text-green-400 mb-2"></i>
+            <h3 class="font-semibold mb-1">Secure</h3>
+            <p class="text-xs text-slate-400">Dữ liệu được bảo mật với Supabase và Token.</p>
+        </div>
+        <div class="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
+            <i data-lucide="bar-chart-3" class="w-6 h-6 text-purple-400 mb-2"></i>
+            <h3 class="font-semibold mb-1">Visual</h3>
+            <p class="text-xs text-slate-400">Biểu đồ trực quan giúp theo dõi dòng tiền.</p>
+        </div>
+    </div>
+
+    <div class="text-sm text-slate-500">
+        Phiên bản 2.0.0 &bull; Phát triển bởi <span class="text-slate-400">HoangZiet</span>
+    </div>
+</div>
+{% endblock %}
