@@ -1,0 +1,212 @@
+{% extends "layout.html" %}
+
+{% block title %}FinGPT - Dashboard{% endblock %}
+
+{% block content %}
+<!-- Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    <div class="glass rounded-2xl p-6">
+        <div class="text-slate-400 text-sm mb-2">💵 Tổng thu</div>
+        <div id="total-income" class="text-2xl font-bold text-green-400">--</div>
+    </div>
+    <div class="glass rounded-2xl p-6">
+        <div class="text-slate-400 text-sm mb-2">💸 Tổng chi</div>
+        <div id="total-expense" class="text-2xl font-bold text-red-400">--</div>
+    </div>
+    <div class="glass rounded-2xl p-6">
+        <div class="text-slate-400 text-sm mb-2">📊 Balance</div>
+        <div id="balance" class="text-2xl font-bold text-purple-400">--</div>
+    </div>
+    <div class="glass rounded-2xl p-6">
+        <div class="text-slate-400 text-sm mb-2">📝 Giao dịch</div>
+        <div id="tx-count" class="text-2xl font-bold text-blue-400">--</div>
+    </div>
+</div>
+
+<!-- Controls -->
+<div class="flex justify-end mb-6 gap-2">
+    <button onclick="setDays(7)" id="btn-7"
+        class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 transition text-sm">7 ngày</button>
+    <button onclick="setDays(30)" id="btn-30"
+        class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-sm">30 ngày</button>
+</div>
+
+<!-- Charts -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <!-- Pie Chart -->
+    <div class="glass rounded-2xl p-6">
+        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+            <i data-lucide="pie-chart" class="w-5 h-5 text-purple-400"></i>
+            Chi tiêu theo danh mục
+        </h3>
+        <div class="h-64">
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+    <!-- Line Chart -->
+    <div class="glass rounded-2xl p-6">
+        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+            <i data-lucide="trending-up" class="w-5 h-5 text-green-400"></i>
+            Xu hướng thu chi
+        </h3>
+        <div class="h-64">
+            <canvas id="trendChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Transactions -->
+<div class="glass rounded-2xl p-6">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold flex items-center gap-2">
+            <i data-lucide="clock" class="w-5 h-5 text-blue-400"></i>
+            Giao dịch gần nhất
+        </h3>
+        <a href="/transactions?user_id={{ user_id }}&token={{ token }}"
+            class="text-sm text-purple-400 hover:text-purple-300">Xem tất cả →</a>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="text-slate-400 text-left border-b border-slate-700/50 text-sm">
+                    <th class="pb-3 pl-2">Ngày</th>
+                    <th class="pb-3">Danh mục</th>
+                    <th class="pb-3">Ghi chú</th>
+                    <th class="pb-3 text-right pr-2">Số tiền</th>
+                </tr>
+            </thead>
+            <tbody id="tx-table" class="text-sm">
+                <!-- Filled by JS -->
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentDays = 7;
+    let categoryChart, trendChart;
+
+    const categoryIcons = {
+        "Ăn uống": "🍜", "Di chuyển": "🚗", "Mua sắm": "🛒",
+        "Giải trí": "🎮", "Hóa đơn": "🏠", "Sức khỏe": "💊",
+        "Học tập": "📚", "Quà tặng": "🎁", "Khác": "❓",
+        "Lương": "💼", "Thưởng": "🎯", "Thu khác": "💰"
+    };
+
+    function setDays(days) {
+        currentDays = days;
+        document.getElementById('btn-7').className = days === 7
+            ? 'px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 transition text-sm'
+            : 'px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-sm';
+        document.getElementById('btn-30').className = days === 30
+            ? 'px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 transition text-sm'
+            : 'px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-sm';
+        loadData();
+    }
+
+    async function loadData() {
+        if (!USER_ID) return;
+        const params = `user_id=${USER_ID}&token=${TOKEN}&days=${currentDays}`;
+
+        // Summary
+        const summary = await fetch(`/api/summary?${params}`).then(r => r.json());
+        document.getElementById('total-income').textContent = formatMoney(summary.total_income);
+        document.getElementById('total-expense').textContent = formatMoney(summary.total_expense);
+        document.getElementById('balance').textContent = formatMoney(summary.balance);
+        document.getElementById('tx-count').textContent = summary.transaction_count;
+
+        // By Category
+        const categories = await fetch(`/api/by-category?${params}`).then(r => r.json());
+        updateCategoryChart(categories);
+
+        // Trend
+        const trend = await fetch(`/api/trend?${params}`).then(r => r.json());
+        updateTrendChart(trend);
+
+        // Transactions (limiting to 5 for dashboard)
+        const txs = await fetch(`/api/transactions?${params}&limit=5`).then(r => r.json());
+        renderTable(txs);
+    }
+
+    function updateCategoryChart(data) {
+        const expenseData = data.filter(d => d.type === 'chi');
+        const labels = expenseData.map(d => d.category);
+        const values = expenseData.map(d => d.total);
+        const colors = ['#f87171', '#fb923c', '#fbbf24', '#a3e635', '#34d399', '#22d3ee', '#818cf8', '#e879f9'];
+
+        if (categoryChart) categoryChart.destroy();
+        categoryChart = new Chart(document.getElementById('categoryChart'), {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: colors.slice(0, labels.length),
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { color: '#94a3b8', font: { family: 'Inter' } } }
+                },
+                cutout: '70%'
+            }
+        });
+    }
+
+    function updateTrendChart(data) {
+        const labels = data.map(d => d.date.slice(5)); // MM-DD
+        const income = data.map(d => d.income);
+        const expense = data.map(d => d.expense);
+
+        if (trendChart) trendChart.destroy();
+        trendChart = new Chart(document.getElementById('trendChart'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Thu', data: income, borderColor: '#4ade80', backgroundColor: 'rgba(74,222,128,0.1)', fill: true, tension: 0.4 },
+                    { label: 'Chi', data: expense, borderColor: '#f87171', backgroundColor: 'rgba(248,113,113,0.1)', fill: true, tension: 0.4 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Inter' } } } },
+                scales: {
+                    x: { grid: { color: '#334155', display: false }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { color: '#334155', borderDash: [5, 5] }, ticks: { color: '#94a3b8' } }
+                },
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                }
+            }
+        });
+    }
+
+    function renderTable(txs) {
+        const tbody = document.getElementById('tx-table');
+        tbody.innerHTML = txs.map(tx => `
+            <tr class="border-b border-slate-700/50 hover:bg-slate-800/50 transition">
+                <td class="py-3 pl-2">${tx.date}</td>
+                <td class="py-3">
+                    <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-slate-800 border border-slate-700">
+                        ${categoryIcons[tx.category] || '❓'} ${tx.category}
+                    </span>
+                </td>
+                <td class="py-3 text-slate-400 max-w-xs truncate">${tx.note || '-'}</td>
+                <td class="py-3 text-right pr-2 font-medium ${tx.type === 'thu' ? 'text-green-400' : 'text-red-400'}">
+                    ${tx.type === 'thu' ? '+' : '-'}${formatMoney(tx.amount)}
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    loadData();
+</script>
+{% endblock %}

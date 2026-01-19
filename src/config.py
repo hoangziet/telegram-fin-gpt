@@ -23,6 +23,12 @@ class Config:
     
     # Database
     DB_PATH: str = os.getenv("DB_PATH", "data/finance.db")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+    
+    @property
+    def DB_TYPE(self) -> str:
+        """Determine DB type."""
+        return "postgres" if self.DATABASE_URL else "sqlite"
     
     # Debug
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"

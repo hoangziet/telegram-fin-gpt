@@ -42,9 +42,34 @@ async def cmd_help(message: Message):
         "**Sửa:** `à nhầm, 30k thôi`\n"
         "**Xem:** `hôm nay chi bao nhiêu` · `tuần này`\n"
         "**Lịch sử:** `xem 10 giao dịch gần nhất`\n"
-        "**Xóa:** `xóa cái vừa rồi`\n\n"
+        "**Xóa:** `xóa cái vừa rồi`\n"
+        "**Dashboard:** `/dashboard` - xem biểu đồ đẹp\n\n"
         "📸 Gửi ảnh bill để nhận dạng!",
         parse_mode=ParseMode.MARKDOWN
+    )
+
+
+@router.message(Command("dashboard"))
+async def cmd_dashboard(message: Message):
+    """Generate dashboard link."""
+    from ..web.routes import generate_token
+    from ..config import config
+    
+    user_id = message.from_user.id
+    token = generate_token(user_id)
+    
+    # URL for local/deployed env
+    base_url = "http://localhost:5000" if config.DEBUG else "https://YOUR_REPL_URL.repl.co"
+    # For now assume localhost until deployed
+    url = f"http://localhost:5000/dashboard?user_id={user_id}&token={token}"
+    
+    await message.answer(
+        f"📊 **Dashboard của bạn:**\n\n"
+        f"👉 [Nhấn vào để mở]({url})\n\n"
+        f"🔑 Token: `{token}`\n"
+        f"⚠️ _Link này là bí mật, đừng chia sẻ!_",
+        parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=True
     )
 
 
