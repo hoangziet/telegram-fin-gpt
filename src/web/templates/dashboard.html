@@ -107,8 +107,7 @@
     }
 
     async function loadData() {
-        if (!USER_ID) return;
-        const params = `user_id=${USER_ID}&token=${TOKEN}&days=${currentDays}`;
+        const params = `days=${currentDays}`;
 
         // Summary
         const summary = await fetch(`/api/summary?${params}`).then(r => r.json());

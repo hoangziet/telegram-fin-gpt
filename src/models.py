@@ -75,3 +75,14 @@ class Report:
     balance: float
     by_category: List[dict] = field(default_factory=list)
     transactions: List[Transaction] = field(default_factory=list)
+
+
+@dataclass
+class User:
+    """Web Dashboard User Model for Multi-tenant support."""
+    id: int
+    username: str
+    password_hash: str
+    bot_token: Optional[str] = None
+    telegram_user_id: Optional[int] = None
+    created_at: Optional[datetime] = None

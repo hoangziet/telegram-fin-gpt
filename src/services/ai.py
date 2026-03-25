@@ -25,46 +25,47 @@ class AIService:
     """AI service for parsing natural language."""
     
     SYSTEM_INSTRUCTION = f"""
-Bạn là trợ lý tài chính. Phân tích tin nhắn và trả về JSON action.
+Bạn là FinGPT - trợ lý quản lý tài chính thông minh kiêm một AI trò chuyện chung. Phân tích tin nhắn và trả về MỘT MẢNG (ARRAY) CHỨA CÁC JSON ACTION. Nếu user có nhiều yêu cầu trong 1 câu (ví dụ ăn sáng 30k trưa 40k), hãy tạo nhiều object trong mảng.
 
 **ACTIONS:**
 - "insert": Thêm giao dịch mới
 - "update": Sửa giao dịch đã có  
 - "delete": Xóa giao dịch
-- "query": Xem/tìm kiếm giao dịch
-- "report": Xem báo cáo
-- "export": Xuất dữ liệu
+- "query": Xem/tìm kiếm lịch sử giao dịch
+- "report": Xem báo cáo thống kê
+- "export": Xuất dữ liệu CSV
 - "clear": Xóa tất cả
 - "undo": Hoàn tác
 - "help": Xem hướng dẫn
+- "chat": Dùng khi user chào hỏi, nói chuyện phiếm, hỏi vấn đề chung, tư vấn tiết kiệm.
 - "unknown": Không hiểu
 
 **JSON FORMAT:**
-{{
-    "action": "<action>",
-    "amount": <số tiền đã convert | null>,
-    "category": "<danh mục>",
-    "type": "thu" | "chi",
-    "date_offset": <số ngày lùi lại từ hôm nay, 0=hôm nay, 1=hôm qua, 2=hôm kia>,
-    "time_of_day": "sáng" | "trưa" | "chiều" | "tối" | null,
-    "transaction_id": <id | null>,
-    "keyword": "<từ khóa tìm | null>",
-    "report_type": "day" | "week" | "month" | null,
-    "limit": <số lượng | 10>,
-    "message": "<phản hồi cho user | null>"
-}}
+[
+  {{
+      "action": "<action>",
+      "amount": <số tiền đã convert | null>,
+      "category": "<danh mục>",
+      "type": "thu" | "chi",
+      "date_offset": <số ngày lùi lại từ hôm nay, 0=hôm, 1=qua, 2=kia>,
+      "time_of_day": "sáng" | "trưa" | "chiều" | "tối" | null,
+      "transaction_id": <id | null>,
+      "keyword": "<từ khóa tìm | null>",
+      "report_type": "day" | "week" | "month" | null,
+      "limit": <số lượng | 10>,
+      "message": "<phản hồi nói chuyện với user (nếu action='chat') | null>"
+  }}
+]
 
 **LƯU Ý QUAN TRỌNG:**
-- KHÔNG cần trả về "note" - hệ thống sẽ tự lưu toàn bộ tin nhắn gốc làm note
+- LUÔN LUÔN TRẢ VỀ DƯỚI DẠNG MẢNG (Kể cả khi chỉ có 1 action).
+- NẾU action = 'chat', BẮT BUỘC phải điền nội dung câu trả lời tự nhiên của bạn vào trường "message".
+- KHÔNG cần trả về "note" khi insert - hệ thống sẽ tự lưu toàn bộ tin nhắn gốc làm note.
 
 **PHÂN TÍCH THỜI GIAN:**
 Ví dụ cách parse:
 - "ăn phở 50k" → date_offset: 0, time_of_day: null
 - "sáng nay cafe 35k" → date_offset: 0, time_of_day: "sáng"
-- "trưa qua cơm 55k" → date_offset: 1, time_of_day: "trưa"
-- "tối hôm kia nhậu 200k" → date_offset: 2, time_of_day: "tối"
-- "hôm qua mua đồ 100k" → date_offset: 1, time_of_day: null
-- "chiều nay grab 45k" → date_offset: 0, time_of_day: "chiều"
 
 **CATEGORIES:**
 Chi: {EXPENSE_CATEGORIES}
@@ -74,7 +75,7 @@ Thu: {INCOME_CATEGORIES}
 
 **THU/CHI:** Mặc định "chi". "thu" khi có: lương, thưởng, được cho, nhận được, hoàn tiền, bán được
 
-**CHỈ TRẢ VỀ JSON.**
+**CHỈ TRẢ VỀ MẢNG JSON.**
 """
     
     def __init__(self):
@@ -95,21 +96,23 @@ Thu: {INCOME_CATEGORIES}
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
     
-    def _extract_json(self, text: str) -> dict:
+    def _extract_json(self, text: str) -> list:
         """Extract JSON from response."""
         self._debug_log("response.txt", text)
         
         for attempt in [
             lambda: json.loads(text.strip()),
             lambda: json.loads(re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text).group(1)),
-            lambda: json.loads(re.search(r'\{[\s\S]*\}', text).group(0))
+            lambda: json.loads(re.search(r'\[[\s\S]*\]', text).group(0))
         ]:
             try:
-                return attempt()
+                res = attempt()
+                if isinstance(res, dict): return [res]
+                if isinstance(res, list): return res
             except:
                 continue
         
-        return {"action": "unknown"}
+        return [{"action": "unknown"}]
     
     def _resolve_date(self, hint: Optional[str]) -> date:
         """Resolve time hint to date."""
@@ -126,6 +129,9 @@ Thu: {INCOME_CATEGORIES}
     
     def _parse_action(self, data: dict) -> AIAction:
         """Convert dict to AIAction."""
+        if not isinstance(data, dict):
+            return AIAction(action=ActionType.UNKNOWN)
+            
         action_str = data.get("action", "unknown")
         try:
             action = ActionType(action_str)
@@ -146,7 +152,6 @@ Thu: {INCOME_CATEGORIES}
             except ValueError:
                 report_type = ReportType.DAY
         
-        # Resolve date from date_offset (handle None from AI)
         date_offset = data.get("date_offset") or 0
         if not isinstance(date_offset, int):
             date_offset = 0
@@ -167,11 +172,11 @@ Thu: {INCOME_CATEGORIES}
             message=data.get("message")
         )
     
-    async def parse(self, message: str, context: Optional[dict] = None) -> AIAction:
-        """Parse message to action."""
+    from typing import List
+    async def parse(self, message: str, context: Optional[dict] = None) -> List[AIAction]:
+        """Parse message to actions."""
         self._debug_log("input.txt", message)
         
-        # Build context
         ctx = ""
         if context and context.get("last_tx"):
             tx = context["last_tx"]
@@ -186,8 +191,8 @@ Thu: {INCOME_CATEGORIES}
             )
         )
         
-        data = self._extract_json(response.text)
-        return self._parse_action(data)
+        data_list = self._extract_json(response.text)
+        return [self._parse_action(d) for d in data_list]
     
     async def parse_image(self, image_bytes: bytes) -> AIAction:
         """Parse bank bill image."""
@@ -208,7 +213,8 @@ Thu: {INCOME_CATEGORIES}
             )
         )
         
-        data = self._extract_json(response.text)
+        data_list = self._extract_json(response.text)
+        data = data_list[0] if data_list else {}
         action = self._parse_action(data)
         action.action = ActionType.INSERT
         return action

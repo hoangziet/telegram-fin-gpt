@@ -43,24 +43,28 @@
             </div>
 
             <div class="hidden md:flex gap-1" id="nav-menu">
-                <a href="/dashboard?user_id={{ user_id }}&token={{ token }}"
+                <a href="/dashboard"
                     class="nav-link px-4 py-2 rounded-lg flex items-center gap-2 {% if request.endpoint == 'dashboard.dashboard_page' %}active{% endif %}">
                     <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
                 </a>
-                <a href="/transactions?user_id={{ user_id }}&token={{ token }}"
+                <a href="/transactions"
                     class="nav-link px-4 py-2 rounded-lg flex items-center gap-2 {% if request.endpoint == 'dashboard.transactions_page' %}active{% endif %}">
-                    <i data-lucide="list" class="w-4 h-4"></i> Transactions
+                    <i data-lucide="list" class="w-4 h-4"></i> Giao dịch
                 </a>
-                <a href="/about?user_id={{ user_id }}&token={{ token }}"
+                <a href="/settings"
+                    class="nav-link px-4 py-2 rounded-lg flex items-center gap-2 {% if request.endpoint == 'dashboard.settings_page' %}active{% endif %}">
+                    <i data-lucide="settings" class="w-4 h-4"></i> Cấu hình
+                </a>
+                <a href="/about"
                     class="nav-link px-4 py-2 rounded-lg flex items-center gap-2 {% if request.endpoint == 'dashboard.about_page' %}active{% endif %}">
-                    <i data-lucide="info" class="w-4 h-4"></i> About
+                    <i data-lucide="info" class="w-4 h-4"></i> Thông tin
                 </a>
             </div>
 
-            <div>
-                <a href="/login"
+            <div class="flex gap-2">
+                <a href="/logout"
                     class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition flex items-center gap-2 text-sm">
-                    <i data-lucide="log-out" class="w-4 h-4"></i> Logout
+                    <i data-lucide="log-out" class="w-4 h-4"></i> Đăng xuất
                 </a>
             </div>
         </nav>
@@ -71,10 +75,6 @@
 
     <script>
         lucide.createIcons();
-
-        // Pass auth params to JS
-        const USER_ID = {{ user_id|default ('null') }};
-        const TOKEN = "{{ token|default('') }}";
 
         function formatMoney(amount) {
             return new Intl.NumberFormat('vi-VN').format(amount) + 'đ';

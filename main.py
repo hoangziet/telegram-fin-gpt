@@ -23,10 +23,12 @@ logger = logging.getLogger(__name__)
 
 # Flask app for Replit Autoscale keep-alive
 app = Flask(__name__)
+import os
+app.secret_key = os.getenv("DASHBOARD_SECRET", "fingpt-secret-key-2026")
 
-# Register dashboard blueprint
-from src.web import dashboard
-app.register_blueprint(dashboard)
+# Init web routes and login manager
+from src.web.routes import init_web
+init_web(app)
 
 @app.route("/")
 def home():
@@ -57,14 +59,16 @@ async def main():
     await db.init()
     logger.info("✅ Database ready")
     
-    # Init bot
-    bot = Bot(token=config.BOT_TOKEN)
-    dp = Dispatcher()
-    dp.include_router(router)
+    # Start Multi-tenant Bot Manager
+    from src.services.bot_manager import bot_manager
+    logger.info("🤖 Starting Multi-tenant Bot Manager...")
+    await bot_manager.start_all()
     
-    logger.info("✅ Bot running! Ctrl+C to stop.")
-    await dp.start_polling(bot)
-
+    logger.info("✅ System running! Ctrl+C to stop.")
+    
+    # Keep main alive
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
     asyncio.run(main())

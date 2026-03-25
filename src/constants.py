@@ -23,6 +23,7 @@ class ActionType(str, Enum):
     CLEAR = "clear"
     UNDO = "undo"
     HELP = "help"
+    CHAT = "chat"
     UNKNOWN = "unknown"
 
 

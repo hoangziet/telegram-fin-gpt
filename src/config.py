@@ -14,8 +14,7 @@ load_dotenv()
 class Config:
     """Application configuration."""
     
-    # Telegram
-    BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    # Telegram (Now entirely managed dynamically from DB)
     
     # Gemini
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
@@ -36,8 +35,6 @@ class Config:
     
     def validate(self) -> None:
         """Validate required config."""
-        if not self.BOT_TOKEN:
-            raise ValueError("TELEGRAM_BOT_TOKEN is required")
         if not self.GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY is required")
 

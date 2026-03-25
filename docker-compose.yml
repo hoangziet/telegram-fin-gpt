@@ -1,0 +1,12 @@
+services:
+  fingpt:
+    build: .
+    container_name: fingpt_bot
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env
+    environment:
+      - TZ=Asia/Ho_Chi_Minh

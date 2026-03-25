@@ -1,5 +1,5 @@
 """Web module."""
 
-from .routes import dashboard, generate_token
+from .routes import dashboard
 
-__all__ = ["dashboard", "generate_token"]
+__all__ = ["dashboard"]
