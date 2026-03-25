@@ -46,6 +46,7 @@ class AIAction:
     action: ActionType
     amount: Optional[float] = None
     category: Optional[str] = None
+    note: Optional[str] = None
     tx_type: Optional[TransactionType] = None
     
     # Date/time - computed from AI's date_offset and time_of_day
