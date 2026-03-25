@@ -1,5 +1,10 @@
 # FinGPT V2 - Intelligent Finance Telegram Bot
 
+<p align="center">
+  <img src="assets/images/demo-chat.png" width="45%" alt="Demo Chat">
+  <img src="assets/images/demo-dashboard.png" width="45%" alt="Demo Dashboard">
+</p>
+
 FinGPT V2 is an AI-powered personal finance management bot for Telegram. It uses Google's Gemini AI to parse natural language and receipt images into structured financial transactions. The V2 architecture introduces a **Multi-tenant System** with a built-in Flask Web Dashboard, allowing you to host multiple standalone bots for different users on a single server using a local SQLite database.
 
 ## 🌟 Key Features
