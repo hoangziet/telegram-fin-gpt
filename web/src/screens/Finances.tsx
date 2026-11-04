@@ -177,7 +177,9 @@ export default function Finances({
         current
           ? {
               ...current,
-              items: current.items.map((candidate) => (candidate.id === item.id ? updated : candidate)),
+              items: current.items.map((candidate) =>
+                candidate.id === item.id ? updated : candidate,
+              ),
             }
           : current,
       );
