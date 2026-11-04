@@ -1,0 +1,208 @@
+name: Azure infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        type: choice
+        options: [dev, test, prod]
+      mode:
+        description: Preview changes, or request the protected apply job
+        required: true
+        type: choice
+        options: [preview, apply]
+      resource_group:
+        description: Existing resource group to target
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fingpt-infrastructure-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_fingerprint: ${{ steps.fingerprint.outputs.sha256 }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TARGET_RESOURCE_GROUP: ${{ inputs.resource_group }}
+      NAME_PREFIX: ${{ vars.FINGPT_NAME_PREFIX }}
+      ENVIRONMENT_NAME: ${{ inputs.environment }}
+      OWNER: ${{ vars.FINGPT_OWNER }}
+      ALERT_EMAIL_ADDRESS: ${{ vars.FINGPT_ALERT_EMAIL_ADDRESS }}
+      LOCATION: ${{ vars.FINGPT_AZURE_LOCATION }}
+      VNET_ADDRESS_PREFIX: ${{ vars.FINGPT_VNET_CIDR }}
+      ACA_SUBNET_PREFIX: ${{ vars.FINGPT_ACA_SUBNET_CIDR }}
+      POSTGRES_ADMIN_LOGIN: ${{ vars.FINGPT_POSTGRES_ADMIN_LOGIN }}
+      POSTGRES_ADMIN_PASSWORD: ${{ secrets.FINGPT_POSTGRES_ADMIN_PASSWORD }}
+      FINGPT_DEPLOYMENT_FINGERPRINT_KEY: ${{ secrets.FINGPT_DEPLOYMENT_FINGERPRINT_KEY }}
+      POSTGRES_BACKUP_RETENTION_DAYS: ${{ vars.FINGPT_POSTGRES_BACKUP_RETENTION_DAYS }}
+      EVIDENCE_RETENTION_DAYS: ${{ vars.FINGPT_EVIDENCE_RETENTION_DAYS }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate deployment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_RESOURCE_GROUP" =~ ^[A-Za-z0-9._()-]{1,90}$ ]]
+          [[ "$NAME_PREFIX" =~ ^[a-z0-9]{3,12}$ ]]
+          [[ -n "$AZURE_SUBSCRIPTION_ID" && -n "$NAME_PREFIX" && -n "$OWNER" ]]
+          [[ "$FINGPT_DEPLOYMENT_FINGERPRINT_KEY" =~ ^[a-f0-9]{64}$ ]]
+          if [[ -n "$ALERT_EMAIL_ADDRESS" ]]; then
+            [[ "$ALERT_EMAIL_ADDRESS" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]
+          fi
+          [[ -n "$LOCATION" && -n "$POSTGRES_ADMIN_LOGIN" && -n "$POSTGRES_ADMIN_PASSWORD" ]]
+          [[ -n "$VNET_ADDRESS_PREFIX" && -n "$ACA_SUBNET_PREFIX" ]]
+          [[ -n "$POSTGRES_BACKUP_RETENTION_DAYS" && -n "$EVIDENCE_RETENTION_DAYS" ]]
+      - name: Fingerprint reviewed deployment inputs
+        id: fingerprint
+        run: |
+          fingerprint="$(bash infra/infra_fingerprint.sh)"
+          printf 'sha256=%s\n' "$fingerprint" >> "$GITHUB_OUTPUT"
+      - name: Sign in to the owner-selected Azure subscription with OIDC
+        uses: azure/login@053f7285eb20bf5469ef084617b0b24d3cec53fc # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify selected subscription ID and show target
+        shell: bash
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          active_subscription_id="$(az account show --query id --output tsv)"
+          subscription_name="$(az account show --query name --output tsv)"
+          if [[ "${active_subscription_id,,}" != "${AZURE_SUBSCRIPTION_ID,,}" ]]; then
+            echo "Active subscription ID does not match AZURE_SUBSCRIPTION_ID." >&2
+            exit 1
+          fi
+          printf 'Target subscription: %s (%s)\nTarget resource group: %s\nRegion: %s\n' \
+            "$subscription_name" "$active_subscription_id" "$TARGET_RESOURCE_GROUP" "$LOCATION"
+      - name: Compile and lint Bicep
+        run: |
+          python3 infra/validate_network.py \
+            --vnet "$VNET_ADDRESS_PREFIX" \
+            --aca-subnet "$ACA_SUBNET_PREFIX"
+          az bicep install --version v0.47.16
+          az bicep build --file infra/main.bicep --stdout >/dev/null
+          az bicep lint --file infra/main.bicep
+      - name: Show infrastructure what-if preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment group what-if \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "fingpt-${ENVIRONMENT_NAME}-${GITHUB_RUN_ID}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              namePrefix="$NAME_PREFIX" \
+              environmentName="$ENVIRONMENT_NAME" \
+              owner="$OWNER" \
+              alertEmailAddress="$ALERT_EMAIL_ADDRESS" \
+              location="$LOCATION" \
+              vnetAddressPrefix="$VNET_ADDRESS_PREFIX" \
+              acaSubnetPrefix="$ACA_SUBNET_PREFIX" \
+              postgresAdministratorLogin="$POSTGRES_ADMIN_LOGIN" \
+              postgresAdministratorPassword="$POSTGRES_ADMIN_PASSWORD" \
+              postgresBackupRetentionDays="$POSTGRES_BACKUP_RETENTION_DAYS" \
+              evidenceRetentionDays="$EVIDENCE_RETENTION_DAYS"
+
+  apply:
+    if: inputs.mode == 'apply'
+    needs: preview
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TARGET_RESOURCE_GROUP: ${{ inputs.resource_group }}
+      NAME_PREFIX: ${{ vars.FINGPT_NAME_PREFIX }}
+      ENVIRONMENT_NAME: ${{ inputs.environment }}
+      OWNER: ${{ vars.FINGPT_OWNER }}
+      ALERT_EMAIL_ADDRESS: ${{ vars.FINGPT_ALERT_EMAIL_ADDRESS }}
+      LOCATION: ${{ vars.FINGPT_AZURE_LOCATION }}
+      VNET_ADDRESS_PREFIX: ${{ vars.FINGPT_VNET_CIDR }}
+      ACA_SUBNET_PREFIX: ${{ vars.FINGPT_ACA_SUBNET_CIDR }}
+      POSTGRES_ADMIN_LOGIN: ${{ vars.FINGPT_POSTGRES_ADMIN_LOGIN }}
+      POSTGRES_ADMIN_PASSWORD: ${{ secrets.FINGPT_POSTGRES_ADMIN_PASSWORD }}
+      FINGPT_DEPLOYMENT_FINGERPRINT_KEY: ${{ secrets.FINGPT_DEPLOYMENT_FINGERPRINT_KEY }}
+      POSTGRES_BACKUP_RETENTION_DAYS: ${{ vars.FINGPT_POSTGRES_BACKUP_RETENTION_DAYS }}
+      EVIDENCE_RETENTION_DAYS: ${{ vars.FINGPT_EVIDENCE_RETENTION_DAYS }}
+      EXPECTED_PREVIEW_FINGERPRINT: ${{ needs.preview.outputs.deployment_fingerprint }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify inputs still match the reviewed preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(bash infra/infra_fingerprint.sh)"
+          [[ "$EXPECTED_PREVIEW_FINGERPRINT" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$actual" == "$EXPECTED_PREVIEW_FINGERPRINT" ]] || {
+            echo "Deployment inputs changed after preview; refusing to apply." >&2
+            exit 1
+          }
+      - name: Validate configured deployment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_RESOURCE_GROUP" =~ ^[A-Za-z0-9._()-]{1,90}$ ]]
+          [[ "$NAME_PREFIX" =~ ^[a-z0-9]{3,12}$ ]]
+          [[ -n "$AZURE_SUBSCRIPTION_ID" && -n "$NAME_PREFIX" && -n "$OWNER" ]]
+          [[ "$FINGPT_DEPLOYMENT_FINGERPRINT_KEY" =~ ^[a-f0-9]{64}$ ]]
+          if [[ -n "$ALERT_EMAIL_ADDRESS" ]]; then
+            [[ "$ALERT_EMAIL_ADDRESS" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]
+          fi
+          [[ -n "$LOCATION" && -n "$POSTGRES_ADMIN_LOGIN" && -n "$POSTGRES_ADMIN_PASSWORD" ]]
+          [[ -n "$VNET_ADDRESS_PREFIX" && -n "$ACA_SUBNET_PREFIX" ]]
+          [[ -n "$POSTGRES_BACKUP_RETENTION_DAYS" && -n "$EVIDENCE_RETENTION_DAYS" ]]
+      - name: Sign in to the owner-selected Azure subscription with OIDC
+        uses: azure/login@053f7285eb20bf5469ef084617b0b24d3cec53fc # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Recheck target subscription
+        shell: bash
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          active_subscription_id="$(az account show --query id --output tsv)"
+          subscription_name="$(az account show --query name --output tsv)"
+          if [[ "${active_subscription_id,,}" != "${AZURE_SUBSCRIPTION_ID,,}" ]]; then
+            echo "Active subscription ID does not match AZURE_SUBSCRIPTION_ID." >&2
+            exit 1
+          fi
+      - name: Apply reviewed infrastructure template
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment group create \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "fingpt-${ENVIRONMENT_NAME}-${GITHUB_RUN_ID}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              namePrefix="$NAME_PREFIX" \
+              environmentName="$ENVIRONMENT_NAME" \
+              owner="$OWNER" \
+              alertEmailAddress="$ALERT_EMAIL_ADDRESS" \
+              location="$LOCATION" \
+              vnetAddressPrefix="$VNET_ADDRESS_PREFIX" \
+              acaSubnetPrefix="$ACA_SUBNET_PREFIX" \
+              postgresAdministratorLogin="$POSTGRES_ADMIN_LOGIN" \
+              postgresAdministratorPassword="$POSTGRES_ADMIN_PASSWORD" \
+              postgresBackupRetentionDays="$POSTGRES_BACKUP_RETENTION_DAYS" \
+              evidenceRetentionDays="$EVIDENCE_RETENTION_DAYS"

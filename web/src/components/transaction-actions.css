@@ -1,0 +1,66 @@
+.transaction-actions {
+  min-width: 12rem;
+}
+
+.transaction-action-buttons,
+.transaction-form-actions,
+.revision-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.danger-text {
+  color: var(--color-danger, #9d3322);
+}
+
+.transaction-edit-form,
+.change-preview,
+.revision-history {
+  display: grid;
+  gap: 0.75rem;
+  min-width: min(22rem, 70vw);
+  max-width: calc(100vw - 3rem);
+  box-sizing: border-box;
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--color-rule-2);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-2);
+}
+
+.transaction-form-actions {
+  justify-content: flex-start;
+}
+
+.change-preview p,
+.revision-entry p {
+  color: var(--color-ink-2);
+  font-size: 0.85rem;
+}
+
+.revision-history {
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.revision-heading {
+  justify-content: space-between;
+}
+
+.revision-heading h3 {
+  font-size: 1rem;
+}
+
+.revision-entry {
+  display: grid;
+  gap: 0.25rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--color-rule);
+}
+
+.revision-entry time {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}

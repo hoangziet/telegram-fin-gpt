@@ -1,0 +1,67 @@
+name: Deploy dev web
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fingpt-dev-web
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build verified web revision
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Deploy only the static web app
+        env:
+          SWA_TOKEN: ${{ secrets.FINGPT_DEV_SWA_DEPLOYMENT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SWA_TOKEN" ]]; then
+            echo 'FINGPT_DEV_SWA_DEPLOYMENT_TOKEN is not configured.' >&2
+            exit 1
+          fi
+          npx --yes @azure/static-web-apps-cli@2.1.0 deploy web/dist \
+            --deployment-token "$SWA_TOKEN" \
+            --env production
+      - name: Verify deployed web shell
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --retry 6 --retry-delay 10 --retry-all-errors \
+            https://ambitious-beach-0f2a4c700.8.azurestaticapps.net/ \
+            | grep -q 'Where my bucks go?'
+      - name: Record the deployed URL
+        run: |
+          {
+            echo "### Deployed dev web"
+            echo "- URL: https://ambitious-beach-0f2a4c700.8.azurestaticapps.net/"
+            echo "- Commit: ${{ github.event.workflow_run.head_sha }}"
+          } >> "$GITHUB_STEP_SUMMARY"

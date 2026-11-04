@@ -12,6 +12,7 @@ debug/
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
 .venv/
 venv/
 
@@ -20,6 +21,17 @@ venv/
 .idea/
 *.swp
 *.swo
+
+# JavaScript
+node_modules/
+dist/
+.vite/
+
+# Local cloud/development state
+.azure/
+.terraform/
+.local/evidence/
+midscene_run/
 
 # OS
 .DS_Store

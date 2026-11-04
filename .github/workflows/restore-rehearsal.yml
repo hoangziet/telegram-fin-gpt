@@ -1,0 +1,298 @@
+name: PostgreSQL restore rehearsal
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: Existing test resource group containing the FinGPT platform
+        required: true
+        type: string
+      backup_name:
+        description: Exact customer on-demand backup to restore
+        required: true
+        type: string
+      restore_server_name:
+        description: New, unique name beginning with <prefix>-test-restore-
+        required: true
+        type: string
+      mode:
+        description: Preview the restore plan or request protected apply approval
+        required: true
+        type: choice
+        options: [preview, apply]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fingpt-restore-rehearsal
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_fingerprint: ${{ steps.fingerprint.outputs.sha256 }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TARGET_RESOURCE_GROUP: ${{ inputs.resource_group }}
+      NAME_PREFIX: ${{ vars.FINGPT_NAME_PREFIX }}
+      ENVIRONMENT_NAME: test
+      RESTORE_BACKUP_NAME: ${{ inputs.backup_name }}
+      RESTORE_SERVER_NAME: ${{ inputs.restore_server_name }}
+      FINGPT_POSTGRES_BACKUP_RETENTION_DAYS: ${{ vars.FINGPT_POSTGRES_BACKUP_RETENTION_DAYS }}
+      FINGPT_DEPLOYMENT_FINGERPRINT_KEY: ${{ secrets.FINGPT_DEPLOYMENT_FINGERPRINT_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate the non-production restore request
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_RESOURCE_GROUP" =~ ^[A-Za-z0-9._()-]{1,90}$ ]]
+          [[ "$NAME_PREFIX" =~ ^[a-z0-9]{3,12}$ ]]
+          [[ "$RESTORE_BACKUP_NAME" =~ ^[A-Za-z0-9._-]{1,90}$ ]]
+          [[ "$RESTORE_SERVER_NAME" =~ ^[a-z0-9][a-z0-9-]{2,62}$ ]]
+          [[ "$FINGPT_POSTGRES_BACKUP_RETENTION_DAYS" =~ ^([7-9]|[12][0-9]|3[0-5])$ ]]
+          [[ "$FINGPT_DEPLOYMENT_FINGERPRINT_KEY" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$RESTORE_SERVER_NAME" == "${NAME_PREFIX}-test-restore-"* ]]
+      - name: Fingerprint reviewed restore request
+        id: fingerprint
+        run: |
+          fingerprint="$(bash infra/restore_fingerprint.sh)"
+          printf 'sha256=%s\n' "$fingerprint" >> "$GITHUB_OUTPUT"
+      - name: Sign in to the owner-selected Azure subscription with OIDC
+        uses: azure/login@053f7285eb20bf5469ef084617b0b24d3cec53fc # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify selected subscription ID and identify target
+        shell: bash
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          active_subscription_id="$(az account show --query id --output tsv)"
+          export AZURE_SUBSCRIPTION_NAME="$(az account show --query name --output tsv)"
+          if [[ "${active_subscription_id,,}" != "${AZURE_SUBSCRIPTION_ID,,}" ]]; then
+            echo "Active subscription ID does not match AZURE_SUBSCRIPTION_ID." >&2
+            exit 1
+          fi
+          printf 'Test-only restore preview.\nSubscription: %s (%s)\nResource group: %s\n' \
+            "$AZURE_SUBSCRIPTION_NAME" "$active_subscription_id" "$TARGET_RESOURCE_GROUP"
+          verifier_job="${NAME_PREFIX}-test-rverify"
+          aca_environment_id="$(az containerapp env show \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "${NAME_PREFIX}-test-aca" \
+            --query id --output tsv)"
+          verifier_config="$(az containerapp job show \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "$verifier_job" \
+            --output json)"
+          jq -e --arg environment_id "$aca_environment_id" '
+            .properties.environmentId == $environment_id
+            and .properties.configuration.triggerType == "Manual"
+            and (.properties.configuration.secrets | any(
+              .name == "database-url" and (.keyVaultUrl | length > 0)
+            ))
+            and (.properties.configuration.secrets | any(
+              .name == "session-key" and (.keyVaultUrl | length > 0)
+            ))
+            and (.properties.template.containers | any(
+              .name == "restore-verifier"
+              and .command == ["python", "-m", "fingpt.restore_verification"]
+              and (.env | any(.name == "DATABASE_URL" and .secretRef == "database-url"))
+              and (.env | any(.name == "FIN_GPT_SECRET_KEY" and .secretRef == "session-key"))
+              and (.env | any(.name == "FINGPT_DEPLOYMENT_ENV" and .value == "production"))
+              and (.env | any(.name == "FINGPT_EVIDENCE_STORAGE_MODE" and .value == "azure"))
+            ))
+          ' <<< "$verifier_config" >/dev/null
+          bash infra/prepare_restore_plan.sh | jq .
+
+  apply:
+    if: inputs.mode == 'apply'
+    needs: preview
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TARGET_RESOURCE_GROUP: ${{ inputs.resource_group }}
+      NAME_PREFIX: ${{ vars.FINGPT_NAME_PREFIX }}
+      ENVIRONMENT_NAME: test
+      RESTORE_BACKUP_NAME: ${{ inputs.backup_name }}
+      RESTORE_SERVER_NAME: ${{ inputs.restore_server_name }}
+      FINGPT_POSTGRES_BACKUP_RETENTION_DAYS: ${{ vars.FINGPT_POSTGRES_BACKUP_RETENTION_DAYS }}
+      FINGPT_DEPLOYMENT_FINGERPRINT_KEY: ${{ secrets.FINGPT_DEPLOYMENT_FINGERPRINT_KEY }}
+      EXPECTED_PREVIEW_FINGERPRINT: ${{ needs.preview.outputs.deployment_fingerprint }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify inputs still match the reviewed restore preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(bash infra/restore_fingerprint.sh)"
+          [[ "$EXPECTED_PREVIEW_FINGERPRINT" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$actual" == "$EXPECTED_PREVIEW_FINGERPRINT" ]] || {
+            echo "Restore inputs changed after preview; refusing to create the server." >&2
+            exit 1
+          }
+      - name: Sign in to the owner-selected Azure subscription with OIDC
+        uses: azure/login@053f7285eb20bf5469ef084617b0b24d3cec53fc # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Recheck subscription and restore plan after approval
+        id: restore_plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          active_subscription_id="$(az account show --query id --output tsv)"
+          export AZURE_SUBSCRIPTION_NAME="$(az account show --query name --output tsv)"
+          if [[ "${active_subscription_id,,}" != "${AZURE_SUBSCRIPTION_ID,,}" ]]; then
+            echo "Active subscription ID does not match AZURE_SUBSCRIPTION_ID." >&2
+            exit 1
+          fi
+          restore_plan="$(bash infra/prepare_restore_plan.sh)"
+          printf '%s\n' "$restore_plan" | tee "$RUNNER_TEMP/restore-plan.json" | jq .
+          printf 'restore_time=%s\n' "$(jq -r .restoreTimeUtc <<< "$restore_plan")" \
+            >> "$GITHUB_OUTPUT"
+      - name: Create test restore server
+        id: restore_request
+        shell: bash
+        env:
+          RESTORE_TIME_UTC: ${{ steps.restore_plan.outputs.restore_time }}
+        run: |
+          set -euo pipefail
+          vnet_name="${NAME_PREFIX}-test-vnet"
+          vnet_id="$(az network vnet show \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "$vnet_name" --query id --output tsv)"
+          subnet_id="$(az network vnet subnet show \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --vnet-name "$vnet_name" --name postgresql --query id --output tsv)"
+          private_dns_zone_id="$(az network private-dns zone show \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name privatelink.postgres.database.azure.com --query id --output tsv)"
+          az postgres flexible-server restore \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "$RESTORE_SERVER_NAME" \
+            --source-server "${NAME_PREFIX}-test-pg" \
+            --restore-time "$RESTORE_TIME_UTC" \
+            --vnet "$vnet_id" \
+            --subnet "$subnet_id" \
+            --private-dns-zone "$private_dns_zone_id" \
+            --no-wait
+          printf 'restore_requested_at=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            >> "$GITHUB_OUTPUT"
+          printf 'restore_requested_epoch=%s\n' "$(date -u +'%s')" >> "$GITHUB_OUTPUT"
+      - name: Wait for restored PostgreSQL and verify it from the private network
+        id: restore_verify
+        env:
+          RESTORE_REQUESTED_EPOCH: ${{ steps.restore_request.outputs.restore_requested_epoch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 5400))
+          state=''
+          while (( SECONDS < deadline )); do
+            state="$(az postgres flexible-server show \
+              --subscription "$AZURE_SUBSCRIPTION_ID" \
+              --resource-group "$TARGET_RESOURCE_GROUP" \
+              --name "$RESTORE_SERVER_NAME" \
+              --query state --output tsv)"
+            if [[ "$state" == 'Ready' ]]; then
+              break
+            fi
+            if [[ "$state" == 'Failed' || "$state" == 'Disabled' ]]; then
+              echo "Restored PostgreSQL server entered state $state." >&2
+              exit 1
+            fi
+            sleep 30
+          done
+          [[ "$state" == 'Ready' ]] || {
+            echo 'Timed out waiting for the restored PostgreSQL server.' >&2
+            exit 1
+          }
+
+          restore_host="$(az postgres flexible-server show \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "$RESTORE_SERVER_NAME" \
+            --query fullyQualifiedDomainName --output tsv)"
+          [[ "$restore_host" == "${RESTORE_SERVER_NAME}.postgres.database.azure.com" ]]
+          verifier_job="${NAME_PREFIX}-test-rverify"
+          execution_name="$(az containerapp job start \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "$verifier_job" \
+            --env-vars "RESTORE_DATABASE_HOST=$restore_host" \
+            --query name --output tsv)"
+          [[ -n "$execution_name" ]]
+          deadline=$((SECONDS + 1200))
+          status=''
+          while (( SECONDS < deadline )); do
+            status="$(az containerapp job execution show \
+              --subscription "$AZURE_SUBSCRIPTION_ID" \
+              --resource-group "$TARGET_RESOURCE_GROUP" \
+              --name "$verifier_job" \
+              --job-execution-name "$execution_name" \
+              --query properties.status --output tsv)"
+            case "$status" in
+              Succeeded)
+                printf 'Restore schema verification succeeded: %s\n' "$execution_name"
+                completed_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+                completed_epoch="$(date -u +'%s')"
+                printf 'execution_name=%s\n' "$execution_name" >> "$GITHUB_OUTPUT"
+                printf 'verification_completed_at=%s\n' "$completed_at" >> "$GITHUB_OUTPUT"
+                printf 'elapsed_seconds=%s\n' \
+                  "$((completed_epoch - RESTORE_REQUESTED_EPOCH))" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+              Failed|Stopped|Degraded)
+                echo "Restore verification job ended with status $status." >&2
+                exit 1
+                ;;
+            esac
+            sleep 15
+          done
+          echo 'Timed out waiting for restore verification job.' >&2
+          exit 1
+      - name: Record restore rehearsal evidence
+        if: success()
+        env:
+          RESTORE_REQUESTED_AT: ${{ steps.restore_request.outputs.restore_requested_at }}
+          RESTORE_ELAPSED_SECONDS: ${{ steps.restore_verify.outputs.elapsed_seconds }}
+          VERIFIER_EXECUTION_NAME: ${{ steps.restore_verify.outputs.execution_name }}
+          VERIFICATION_COMPLETED_AT: ${{ steps.restore_verify.outputs.verification_completed_at }}
+          RESTORE_TIME_UTC: ${{ steps.restore_plan.outputs.restore_time }}
+        run: |
+          {
+            echo '## PostgreSQL restore rehearsal'
+            echo
+            echo "- Result: schema verification succeeded"
+            echo "- Subscription ID: \`$AZURE_SUBSCRIPTION_ID\`"
+            echo "- Resource group: \`$TARGET_RESOURCE_GROUP\`"
+            echo "- Source: \`${NAME_PREFIX}-test-pg\`"
+            echo "- Restored server: \`$RESTORE_SERVER_NAME\` (retained for reviewed cleanup)"
+            echo "- Backup: \`$RESTORE_BACKUP_NAME\`"
+            echo "- Recovery point (UTC): \`$RESTORE_TIME_UTC\`"
+            echo "- Restore request accepted (UTC): \`$RESTORE_REQUESTED_AT\`"
+            echo "- Schema verification completed (UTC): \`$VERIFICATION_COMPLETED_AT\`"
+            echo "- Request-to-verification duration (seconds): \`$RESTORE_ELAPSED_SECONDS\`"
+            echo "- Verifier execution: \`$VERIFIER_EXECUTION_NAME\`"
+            echo
+            echo 'This records the recovery point and elapsed restore check; it does not infer achieved RPO/RTO.'
+          } >> "$GITHUB_STEP_SUMMARY"
