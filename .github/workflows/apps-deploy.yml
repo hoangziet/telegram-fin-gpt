@@ -1,0 +1,342 @@
+name: Azure application runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Application environment
+        required: true
+        type: choice
+        options: [dev, test, prod]
+      phase:
+        description: Migration, database backup, runtime apps, or smoke checks
+        required: true
+        type: choice
+        options: [migration-job, database-backup, start-migration, runtime-apps, smoke-check]
+      mode:
+        description: Preview the operation or request protected apply approval
+        required: true
+        type: choice
+        options: [preview, apply]
+      resource_group:
+        description: Existing resource group containing the platform resources
+        required: true
+        type: string
+      backend_image:
+        description: Immutable ACR image reference ending in @sha256:<digest>
+        required: false
+        type: string
+      backup_name:
+        description: Unique customer on-demand PostgreSQL backup name
+        required: false
+        type: string
+      api_base_url:
+        description: HTTPS base URL for smoke-check, without a trailing slash
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fingpt-apps-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_fingerprint: ${{ steps.fingerprint.outputs.sha256 }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TARGET_RESOURCE_GROUP: ${{ inputs.resource_group }}
+      ENVIRONMENT_NAME: ${{ inputs.environment }}
+      PHASE: ${{ inputs.phase }}
+      MODE: ${{ inputs.mode }}
+      BACKEND_IMAGE: ${{ inputs.backend_image }}
+      BACKUP_NAME: ${{ inputs.backup_name }}
+      API_BASE_URL: ${{ inputs.api_base_url }}
+      NAME_PREFIX: ${{ vars.FINGPT_NAME_PREFIX }}
+      LOCATION: ${{ vars.FINGPT_AZURE_LOCATION }}
+      DATABASE_URL_SECRET_URI: ${{ vars.FINGPT_DATABASE_URL_SECRET_URI }}
+      SESSION_KEY_SECRET_URI: ${{ vars.FINGPT_SESSION_KEY_SECRET_URI }}
+      API_MAX_REPLICAS: ${{ vars.FINGPT_API_MAX_REPLICAS }}
+      WORKER_MAX_REPLICAS: ${{ vars.FINGPT_WORKER_MAX_REPLICAS }}
+      API_RUNTIME_SECRETS_JSON: ${{ vars.FINGPT_API_RUNTIME_SECRETS_JSON }}
+      WORKER_RUNTIME_SECRETS_JSON: ${{ vars.FINGPT_WORKER_RUNTIME_SECRETS_JSON }}
+      FINGPT_DEPLOYMENT_FINGERPRINT_KEY: ${{ secrets.FINGPT_DEPLOYMENT_FINGERPRINT_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate deployment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_RESOURCE_GROUP" =~ ^[A-Za-z0-9._()-]{1,90}$ ]]
+          [[ "$NAME_PREFIX" =~ ^[a-z0-9]{3,12}$ ]]
+          [[ "$ENVIRONMENT_NAME" == dev || "$ENVIRONMENT_NAME" == test || "$ENVIRONMENT_NAME" == prod ]]
+          [[ "$PHASE" == migration-job || "$PHASE" == database-backup \
+            || "$PHASE" == start-migration \
+            || "$PHASE" == runtime-apps || "$PHASE" == smoke-check ]]
+          [[ "$MODE" == preview || "$MODE" == apply ]]
+          [[ "$FINGPT_DEPLOYMENT_FINGERPRINT_KEY" =~ ^[a-f0-9]{64}$ ]]
+          if [[ "$PHASE" == database-backup || "$PHASE" == start-migration ]]; then
+            [[ "$BACKUP_NAME" =~ ^[a-z0-9][a-z0-9-]{2,62}$ ]]
+          fi
+          if [[ "$PHASE" == smoke-check ]]; then
+            [[ "$API_BASE_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$ ]]
+            [[ -n "$AZURE_SUBSCRIPTION_ID" ]]
+          elif [[ "$PHASE" == database-backup ]]; then
+            [[ -n "$AZURE_SUBSCRIPTION_ID" ]]
+          else
+            [[ -n "$AZURE_SUBSCRIPTION_ID" ]]
+            [[ -n "$BACKEND_IMAGE" ]]
+            expected_registry="${NAME_PREFIX}${ENVIRONMENT_NAME}acr.azurecr.io/"
+            [[ "$BACKEND_IMAGE" == "$expected_registry"* ]]
+            [[ "$BACKEND_IMAGE" =~ ^[A-Za-z0-9.-]+\.azurecr\.io/[A-Za-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]]
+            if [[ "$PHASE" == migration-job || "$PHASE" == runtime-apps ]]; then
+              [[ -n "$LOCATION" ]]
+            fi
+          fi
+          if [[ "$PHASE" == migration-job || "$PHASE" == runtime-apps ]]; then
+            [[ "$DATABASE_URL_SECRET_URI" == https://* ]] \
+              && [[ "$DATABASE_URL_SECRET_URI" == */secrets/* ]]
+            [[ "$SESSION_KEY_SECRET_URI" == https://* ]] \
+              && [[ "$SESSION_KEY_SECRET_URI" == */secrets/* ]]
+            [[ "$API_MAX_REPLICAS" =~ ^([1-9][0-9]?|100)$ ]]
+            [[ "$WORKER_MAX_REPLICAS" =~ ^([1-9][0-9]?|100)$ ]]
+            jq -e 'type == "array" and all(.[]; (.name | test("^[a-z0-9-]{1,32}$")) and (.keyVaultUrl | startswith("https://")) and (.environmentVariable | test("^[A-Z_][A-Z0-9_]*$")))' \
+              <<< "${API_RUNTIME_SECRETS_JSON:-[]}" >/dev/null
+            jq -e 'type == "array" and all(.[]; (.name | test("^[a-z0-9-]{1,32}$")) and (.keyVaultUrl | startswith("https://")) and (.environmentVariable | test("^[A-Z_][A-Z0-9_]*$")))' \
+              <<< "${WORKER_RUNTIME_SECRETS_JSON:-[]}" >/dev/null
+          fi
+      - name: Fingerprint reviewed deployment inputs
+        id: fingerprint
+        run: |
+          fingerprint="$(bash infra/apps_fingerprint.sh)"
+          printf 'sha256=%s\n' "$fingerprint" >> "$GITHUB_OUTPUT"
+      - name: Sign in to the owner-selected Azure subscription with OIDC
+        uses: azure/login@053f7285eb20bf5469ef084617b0b24d3cec53fc # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify selected subscription ID and show target
+        shell: bash
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          active_subscription_id="$(az account show --query id --output tsv)"
+          subscription_name="$(az account show --query name --output tsv)"
+          if [[ "${active_subscription_id,,}" != "${AZURE_SUBSCRIPTION_ID,,}" ]]; then
+            echo "Active subscription ID does not match AZURE_SUBSCRIPTION_ID." >&2
+            exit 1
+          fi
+          printf 'Target subscription: %s (%s)\nResource group: %s\nPhase: %s\n' \
+            "$subscription_name" "$active_subscription_id" "$TARGET_RESOURCE_GROUP" "$PHASE"
+      - name: Compile and lint application template
+        if: inputs.phase == 'migration-job' || inputs.phase == 'runtime-apps'
+        run: |
+          az bicep install --version v0.47.16
+          az bicep build --file infra/apps.bicep --stdout >/dev/null
+          az bicep lint --file infra/apps.bicep
+      - name: Show application what-if preview
+        if: inputs.phase == 'migration-job' || inputs.phase == 'runtime-apps'
+        shell: bash
+        run: |
+          set -euo pipefail
+          deploy_apps=false
+          if [[ "$PHASE" == runtime-apps ]]; then deploy_apps=true; fi
+          az deployment group what-if \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "fingpt-apps-${ENVIRONMENT_NAME}-${GITHUB_RUN_ID}" \
+            --template-file infra/apps.bicep \
+            --parameters \
+              namePrefix="$NAME_PREFIX" \
+              environmentName="$ENVIRONMENT_NAME" \
+              location="$LOCATION" \
+              backendImage="$BACKEND_IMAGE" \
+              databaseUrlSecretUri="$DATABASE_URL_SECRET_URI" \
+              sessionKeySecretUri="$SESSION_KEY_SECRET_URI" \
+              apiMaxReplicas="$API_MAX_REPLICAS" \
+              workerMaxReplicas="$WORKER_MAX_REPLICAS" \
+              apiRuntimeSecrets="${API_RUNTIME_SECRETS_JSON:-[]}" \
+              workerRuntimeSecrets="${WORKER_RUNTIME_SECRETS_JSON:-[]}" \
+              createMigrationJob=true \
+              deployRuntimeApps="$deploy_apps"
+      - name: Show migration job and recent executions
+        if: inputs.phase == 'start-migration'
+        shell: bash
+        run: |
+          set -euo pipefail
+          job_name="${NAME_PREFIX}-${ENVIRONMENT_NAME}-migrate"
+          job_json="$(az containerapp job show \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "$job_name" \
+            --output json)"
+          printf '%s' "$job_json" \
+            | python3 infra/verify_migration_job.py --image "$BACKEND_IMAGE"
+          job_query='{name:name,
+            image:properties.template.containers[0].image,
+            command:properties.template.containers[0].command,
+            args:properties.template.containers[0].args,
+            trigger:properties.configuration.triggerType}'
+          az containerapp job show \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "$job_name" \
+            --query "$job_query" \
+            --output yaml
+          az containerapp job execution list \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "$job_name" \
+            --output table
+      - name: Preview named PostgreSQL backup
+        if: inputs.phase == 'database-backup'
+        shell: bash
+        run: |
+          set -euo pipefail
+          server_name="${NAME_PREFIX}-${ENVIRONMENT_NAME}-pg"
+          existing_backup_count="$(az postgres flexible-server backup list \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --server-name "$server_name" \
+            --query "[?name=='$BACKUP_NAME'] | length(@)" --output tsv)"
+          [[ "$existing_backup_count" == 0 ]] || {
+            echo "Backup name already exists; choose a new unique name." >&2
+            exit 1
+          }
+          printf 'Will create a customer on-demand backup.\nServer: %s\nName: %s\n' \
+            "$server_name" "$BACKUP_NAME"
+          az postgres flexible-server backup list \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --server-name "$server_name" \
+            --query 'sort_by([].{name:name, type:backupType, completedTime:completedTime}, &completedTime)' \
+            --output table
+      - name: Verify completed backup before migration preview
+        if: inputs.phase == 'start-migration'
+        run: bash infra/verify_pre_migration_backup.sh
+      - name: Preview API liveness, readiness, and web shell
+        if: inputs.phase == 'smoke-check'
+        run: bash infra/smoke_check.sh
+
+  apply:
+    if: inputs.mode == 'apply'
+    needs: preview
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TARGET_RESOURCE_GROUP: ${{ inputs.resource_group }}
+      ENVIRONMENT_NAME: ${{ inputs.environment }}
+      PHASE: ${{ inputs.phase }}
+      BACKEND_IMAGE: ${{ inputs.backend_image }}
+      BACKUP_NAME: ${{ inputs.backup_name }}
+      API_BASE_URL: ${{ inputs.api_base_url }}
+      NAME_PREFIX: ${{ vars.FINGPT_NAME_PREFIX }}
+      LOCATION: ${{ vars.FINGPT_AZURE_LOCATION }}
+      DATABASE_URL_SECRET_URI: ${{ vars.FINGPT_DATABASE_URL_SECRET_URI }}
+      SESSION_KEY_SECRET_URI: ${{ vars.FINGPT_SESSION_KEY_SECRET_URI }}
+      API_MAX_REPLICAS: ${{ vars.FINGPT_API_MAX_REPLICAS }}
+      WORKER_MAX_REPLICAS: ${{ vars.FINGPT_WORKER_MAX_REPLICAS }}
+      API_RUNTIME_SECRETS_JSON: ${{ vars.FINGPT_API_RUNTIME_SECRETS_JSON }}
+      WORKER_RUNTIME_SECRETS_JSON: ${{ vars.FINGPT_WORKER_RUNTIME_SECRETS_JSON }}
+      EXPECTED_PREVIEW_FINGERPRINT: ${{ needs.preview.outputs.deployment_fingerprint }}
+      FINGPT_DEPLOYMENT_FINGERPRINT_KEY: ${{ secrets.FINGPT_DEPLOYMENT_FINGERPRINT_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify inputs still match the reviewed preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(bash infra/apps_fingerprint.sh)"
+          [[ "$EXPECTED_PREVIEW_FINGERPRINT" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$actual" == "$EXPECTED_PREVIEW_FINGERPRINT" ]] || {
+            echo "Deployment inputs changed after preview; refusing to apply." >&2
+            exit 1
+          }
+      - name: Sign in to the owner-selected Azure subscription with OIDC
+        uses: azure/login@053f7285eb20bf5469ef084617b0b24d3cec53fc # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Recheck prohibited subscription
+        shell: bash
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          active_subscription_id="$(az account show --query id --output tsv)"
+          subscription_name="$(az account show --query name --output tsv)"
+          if [[ "${active_subscription_id,,}" != "${AZURE_SUBSCRIPTION_ID,,}" ]]; then
+            echo "Active subscription ID does not match AZURE_SUBSCRIPTION_ID." >&2
+            exit 1
+          fi
+      - name: Apply reviewed application phase
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$PHASE" == start-migration ]]; then
+            bash infra/verify_pre_migration_backup.sh
+            job_name="${NAME_PREFIX}-${ENVIRONMENT_NAME}-migrate"
+            job_json="$(az containerapp job show \
+              --subscription "$AZURE_SUBSCRIPTION_ID" \
+              --resource-group "$TARGET_RESOURCE_GROUP" \
+              --name "$job_name" \
+              --output json)"
+            printf '%s' "$job_json" \
+              | python3 infra/verify_migration_job.py --image "$BACKEND_IMAGE"
+            az containerapp job start \
+              --subscription "$AZURE_SUBSCRIPTION_ID" \
+              --resource-group "$TARGET_RESOURCE_GROUP" \
+              --name "$job_name"
+            exit
+          fi
+          if [[ "$PHASE" == database-backup ]]; then
+            server_name="${NAME_PREFIX}-${ENVIRONMENT_NAME}-pg"
+            existing_backup_count="$(az postgres flexible-server backup list \
+              --subscription "$AZURE_SUBSCRIPTION_ID" \
+              --resource-group "$TARGET_RESOURCE_GROUP" \
+              --server-name "$server_name" \
+              --query "[?name=='$BACKUP_NAME'] | length(@)" --output tsv)"
+            [[ "$existing_backup_count" == 0 ]] || {
+              echo "Backup name already exists after preview; refusing to overwrite." >&2
+              exit 1
+            }
+            az postgres flexible-server backup create \
+              --subscription "$AZURE_SUBSCRIPTION_ID" \
+              --resource-group "$TARGET_RESOURCE_GROUP" \
+              --server-name "$server_name" \
+              --name "$BACKUP_NAME"
+            exit
+          fi
+          if [[ "$PHASE" == smoke-check ]]; then
+            bash infra/smoke_check.sh
+            exit
+          fi
+          deploy_apps=false
+          if [[ "$PHASE" == runtime-apps ]]; then deploy_apps=true; fi
+          az deployment group create \
+            --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --resource-group "$TARGET_RESOURCE_GROUP" \
+            --name "fingpt-apps-${ENVIRONMENT_NAME}-${GITHUB_RUN_ID}" \
+            --template-file infra/apps.bicep \
+            --parameters \
+              namePrefix="$NAME_PREFIX" \
+              environmentName="$ENVIRONMENT_NAME" \
+              location="$LOCATION" \
+              backendImage="$BACKEND_IMAGE" \
+              databaseUrlSecretUri="$DATABASE_URL_SECRET_URI" \
+              sessionKeySecretUri="$SESSION_KEY_SECRET_URI" \
+              apiMaxReplicas="$API_MAX_REPLICAS" \
+              workerMaxReplicas="$WORKER_MAX_REPLICAS" \
+              apiRuntimeSecrets="${API_RUNTIME_SECRETS_JSON:-[]}" \
+              workerRuntimeSecrets="${WORKER_RUNTIME_SECRETS_JSON:-[]}" \
+              createMigrationJob=true \
+              deployRuntimeApps="$deploy_apps"

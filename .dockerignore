@@ -1,24 +1,21 @@
-# Docker
-.dockerignore
-Dockerfile
-
-# Git
 .git
-.gitignore
-
-# Python
-__pycache__
-*.py[cod]
+.github
+.agents
+.hallmark
 .venv
-venv
-
-# Dev files
-.env
-*.db
-data/
-debug/
-test*.md
-
-# IDE
-.vscode
-.idea
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.py[cod]
+**/.env*
+**/dist
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.local
+data
+debug
+midscene_run
+docs
+infra
+tasks
