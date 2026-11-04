@@ -65,26 +65,6 @@ export function HistoryIcon({ className = '', size = 20 }: IconProps) {
   );
 }
 
-export function ReportsIcon({ className = '', size = 20 }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M3 3v18h18" />
-      <path d="m19 9-5 5-4-4-3 3" />
-    </svg>
-  );
-}
-
 export function PlusIcon({ className = '', size = 18 }: IconProps) {
   return (
     <svg

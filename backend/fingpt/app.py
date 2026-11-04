@@ -19,6 +19,8 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from fingpt.adapters.evidence_storage import create_evidence_storage
 from fingpt.adapters.foundry_chat import FoundryChat
 from fingpt.adapters.foundry_image_extractor import FoundryImageExtractor
+from fingpt.adapters.foundry_insight import FoundryInsight
+from fingpt.adapters.foundry_router import FoundryRouter
 from fingpt.api.auth import register_auth
 from fingpt.api.chat import register_chat
 from fingpt.api.drafts import register_drafts
@@ -29,6 +31,8 @@ from fingpt.operations import register_operations
 from fingpt.persistence.models import AuthSession, User
 from fingpt.service_bus_operations import register_service_bus_operations
 from fingpt.services.auth import digest_session_token
+from fingpt.services.chat_orchestration import ChatOrchestrator, InsightSpecialist
+from fingpt.services.insights import spending_trend
 
 
 def create_app(overrides: dict[str, Any] | None = None, *, engine: Engine | None = None) -> Flask:
@@ -96,6 +100,16 @@ def create_app(overrides: dict[str, Any] | None = None, *, engine: Engine | None
         app.extensions["chat_assistant"] = FoundryChat(image_endpoint, image_model)
     if app.config.get("CHAT_ASSISTANT") is not None:
         app.extensions["chat_assistant"] = app.config["CHAT_ASSISTANT"]
+
+    router = app.config.get("CHAT_ROUTER")
+    if router is None and image_endpoint and image_model:
+        router = FoundryRouter(image_endpoint, image_model)
+    app.extensions["chat_orchestrator"] = ChatOrchestrator(router)
+
+    narrator = app.config.get("INSIGHT_ASSISTANT")
+    if narrator is None and image_endpoint and image_model:
+        narrator = FoundryInsight(image_endpoint, image_model)
+    app.extensions["insight_specialist"] = InsightSpecialist(narrator, spending_trend)
 
     @app.errorhandler(RequestEntityTooLarge)
     def upload_too_large(_error: RequestEntityTooLarge) -> tuple[Any, int]:

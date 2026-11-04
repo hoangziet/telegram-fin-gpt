@@ -9,7 +9,6 @@ import {
 } from '../api/finances';
 import DraftItemView, { type DraftEditInputs } from '../components/DraftItemView';
 import { FileSpreadsheetIcon, PlusIcon, ReceiptIcon } from '../components/Icons';
-import { t, useLanguage } from '../i18n';
 import { missingFieldLabel } from '../utils/financeFormatters';
 import chatWelcome from '../assets/chat-welcome.png';
 import chatDecoration from '../assets/chat-decoration.png';
@@ -31,30 +30,20 @@ interface ChatProps {
   onDraftItemChange: (item: DraftItem) => void;
   turns: ChatTurn[];
   onTurnsChange: (turns: ChatTurn[]) => void;
-  dateInputs: Record<string, string>;
-  periodInputs: Record<string, string>;
-  textInputs: Record<string, DraftEditInputs>;
+  itemEdits: Record<string, DraftEditInputs>;
   onTextChange: (value: string) => void;
+  onItemEditChange: (id: string, field: keyof DraftEditInputs, value: string) => void;
   onPreview: (draft: DraftPreview) => void;
   onBusyChange: (value: boolean) => void;
   onError: (message: string) => void;
-  onDateChange: (id: string, value: string) => void;
-  onPeriodChange: (id: string, value: string) => void;
-  onDescriptionChange: (id: string, value: string) => void;
-  onAmountChange: (id: string, value: string) => void;
-  onCurrencyChange: (id: string, value: string) => void;
-  onKindChange: (id: string, value: DraftItem['kind']) => void;
-  onCategoryChange: (id: string, value: string) => void;
-  onLocalTimeChange: (id: string, value: string) => void;
   onSaveFacts: (item: DraftItem) => void;
-  onConfirm: (item: DraftItem) => void;
+  onConfirm: (item: DraftItem) => Promise<void>;
 }
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export default function Chat(props: ChatProps) {
-  const { language } = useLanguage();
   const [mode, setMode] = useState<ChatMode>('qa');
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -64,7 +53,9 @@ export default function Chat(props: ChatProps) {
   const [messageIdempotencyKey, setMessageIdempotencyKey] = useState(() => crypto.randomUUID());
   const [selectedItem, setSelectedItem] = useState('');
   const [followups, setFollowups] = useState<ChatTurn[]>([]);
+  const [confirmingAll, setConfirmingAll] = useState(false);
   const activeMode = props.draft ? 'transaction' : mode;
+  const readyItems = props.draft?.items.filter((item) => item.status === 'ready') ?? [];
   const fileInput = useRef<HTMLInputElement>(null);
   const messageInput = useRef<HTMLTextAreaElement>(null);
   const incomplete = props.draft?.items.filter((item) => item.status === 'incomplete') ?? [];
@@ -81,7 +72,7 @@ export default function Chat(props: ChatProps) {
   function chooseImage(nextFile: File | null) {
     if (!nextFile) return;
     if (!IMAGE_TYPES.has(nextFile.type) || nextFile.size === 0 || nextFile.size > MAX_IMAGE_BYTES) {
-      props.onError('Only JPEG, PNG or WebP images up to 10 MiB are supported.');
+      props.onError('Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP tối đa 10 MiB.');
       return;
     }
     props.onError('');
@@ -112,7 +103,7 @@ export default function Chat(props: ChatProps) {
     try {
       const result = await sendChatMessage(
         message,
-        language,
+        'vi',
         props.csrfToken,
         props.turns,
         messageIdempotencyKey,
@@ -124,8 +115,8 @@ export default function Chat(props: ChatProps) {
       } else if (result.intent === 'clarification') {
         props.onDraftItemChange(result.item);
         const reply = result.item.missingFields.length
-          ? 'Updated. Please add the remaining details below.'
-          : 'All required details are present. Review and confirm when ready.';
+          ? 'Đã cập nhật. Vui lòng bổ sung thông tin còn thiếu bên dưới.'
+          : 'Đã đủ thông tin. Hãy xem lại và xác nhận khi sẵn sàng.';
         setFollowups((current) => [
           ...current,
           { role: 'user', text: message },
@@ -143,7 +134,7 @@ export default function Chat(props: ChatProps) {
       props.onTextChange('');
       setMessageIdempotencyKey(crypto.randomUUID());
     } catch (reason) {
-      props.onError(reason instanceof Error ? reason.message : 'Chat is unavailable.');
+      props.onError(reason instanceof Error ? reason.message : 'Trò chuyện hiện không khả dụng.');
     } finally {
       props.onBusyChange(false);
     }
@@ -153,7 +144,7 @@ export default function Chat(props: ChatProps) {
     event.preventDefault();
     if (props.busy) return;
     if (props.draft && file) {
-      props.onError('Choose “New transaction” to start another draft.');
+      props.onError('Chọn "Giao dịch mới" để tạo bản nháp khác.');
       return;
     }
     if (!file) {
@@ -182,12 +173,23 @@ export default function Chat(props: ChatProps) {
     } catch (reason) {
       if (reason instanceof ApiError && reason.statusCode === 409 && !allowDuplicate) {
         setDuplicateDetected(true);
-        props.onError('Image already imported. Choose duplicate import only if intended.');
+        props.onError('Ảnh này đã được nhập trước đó. Chỉ chọn nhập lại nếu bạn chắc chắn.');
       } else {
-        props.onError(reason instanceof Error ? reason.message : 'Could not read receipt image.');
+        props.onError(reason instanceof Error ? reason.message : 'Không đọc được ảnh hoá đơn.');
       }
     } finally {
       props.onBusyChange(false);
+    }
+  }
+
+  async function confirmAllReady() {
+    setConfirmingAll(true);
+    try {
+      for (const item of readyItems) {
+        await props.onConfirm(item);
+      }
+    } finally {
+      setConfirmingAll(false);
     }
   }
 
@@ -197,39 +199,20 @@ export default function Chat(props: ChatProps) {
         {activeMode === 'qa' && props.turns.length === 0 && (
           <div className="chat-welcome">
             <img className="chat-welcome-image" src={chatWelcome} alt="" />
-            <h1>Ready when you are.</h1>
-            <p>Ask about your spending, saving habits, or financial insights.</p>
-            {!props.text.trim() && (
-              <div className="chat-suggestions" aria-label="Try asking">
-                {[
-                  'Summarize my spending this month',
-                  'Where am I spending the most?',
-                  'Help me plan a monthly budget',
-                  'How can I improve my saving habits?',
-                ].map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    disabled={props.busy}
-                    onClick={() => void submitMessage(undefined, prompt)}
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-            )}
+            <h1>Sẵn sàng khi bạn cần.</h1>
+            <p>Hỏi về chi tiêu, thói quen tiết kiệm hoặc phân tích tài chính của bạn.</p>
             <img className="chat-decoration" src={chatDecoration} alt="" />
           </div>
         )}
         {activeMode === 'qa' && props.turns.length > 0 && (
-          <div className="chat-turn-list" role="log" aria-label="Q&A conversation">
+          <div className="chat-turn-list" role="log" aria-label="Hội thoại hỏi đáp">
             {props.turns.map((turn, index) => (
               <div
                 key={index}
                 className={`chat-bubble ${turn.role === 'user' ? 'chat-user-bubble' : 'chat-assistant-bubble'}`}
               >
                 <span className="chat-turn-speaker">
-                  {turn.role === 'user' ? 'You' : 'Where my bucks go?'}
+                  {turn.role === 'user' ? 'Bạn' : 'Where my bucks go?'}
                 </span>
                 <p>{turn.text}</p>
               </div>
@@ -238,10 +221,10 @@ export default function Chat(props: ChatProps) {
         )}
         {activeMode === 'transaction' && !props.draft && (
           <div className="chat-welcome">
-            <h1>What would you like to record?</h1>
+            <h1>Bạn muốn ghi lại khoản gì?</h1>
             {props.pendingDraft && (
               <button type="button" className="btn-secondary chat-resume" onClick={props.onResume}>
-                Resume pending draft
+                Tiếp tục bản nháp đang chờ
               </button>
             )}
           </div>
@@ -251,34 +234,34 @@ export default function Chat(props: ChatProps) {
             <div className="chat-bubble chat-user-bubble">
               {props.draft.evidence.mediaType?.startsWith('image/') &&
                 props.draft.evidence.contentUrl && (
-                  <img src={props.draft.evidence.contentUrl} alt="Submitted receipt" />
+                  <img src={props.draft.evidence.contentUrl} alt="Ảnh hoá đơn đã gửi" />
                 )}
               <p>
                 {props.draft.evidence.sourceText ??
                   props.draft.evidence.originalFilename ??
-                  'Receipt image'}
+                  'Ảnh hoá đơn'}
               </p>
             </div>
             {incomplete.length > 0 && (
               <div className="chat-bubble chat-assistant-bubble" role="status">
                 <p>
                   {onlyMissingClockTime
-                    ? 'What time did this happen?'
-                    : `I still need: ${target?.missingFields
-                        .map((field) => t(language, missingFieldLabel(field)))
+                    ? 'Việc này xảy ra vào lúc mấy giờ?'
+                    : `Còn thiếu: ${target?.missingFields
+                        .map((field) => missingFieldLabel(field))
                         .join(', ')}.`}
                 </p>
                 <span className="chat-turn-speaker">Where my bucks go?</span>
                 {incomplete.length > 1 && (
                   <label className="chat-item-picker">
-                    Reply about item
+                    Trả lời về khoản
                     <select
                       value={target?.id ?? ''}
                       onChange={(event) => setSelectedItem(event.currentTarget.value)}
                     >
                       {incomplete.map((item) => (
                         <option key={item.id} value={item.id}>
-                          {item.index + 1}. {item.description ?? 'No description'}
+                          {item.index + 1}. {item.description ?? 'Chưa có nội dung'}
                         </option>
                       ))}
                     </select>
@@ -287,12 +270,24 @@ export default function Chat(props: ChatProps) {
               </div>
             )}
             <section className="bento-card chat-draft" aria-labelledby="chat-draft-title">
-              <h2 id="chat-draft-title" className="card-title">
-                Review transaction
-              </h2>
+              <div className="chat-draft-heading">
+                <h2 id="chat-draft-title" className="card-title">
+                  Xem lại giao dịch
+                </h2>
+                {readyItems.length > 1 && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => void confirmAllReady()}
+                    disabled={props.busy || confirmingAll}
+                  >
+                    {confirmingAll ? 'Đang xác nhận…' : `Xác nhận tất cả (${readyItems.length})`}
+                  </button>
+                )}
+              </div>
               <details className="source-evidence-accordion">
                 <summary>
-                  <ReceiptIcon size={16} /> View source
+                  <ReceiptIcon size={16} /> Xem chứng từ gốc
                 </summary>
                 <div className="evidence-accordion-content">
                   {props.draft.evidence.sourceText && (
@@ -305,12 +300,12 @@ export default function Chat(props: ChatProps) {
                       <img
                         className="evidence-img"
                         src={props.draft.evidence.contentUrl}
-                        alt="Original receipt image"
+                        alt="Ảnh hoá đơn gốc"
                       />
                     )}
                   {props.draft.evidence.sourceType === 'csv' && props.draft.evidence.contentUrl && (
                     <a className="evidence-link" href={props.draft.evidence.contentUrl} download>
-                      <FileSpreadsheetIcon size={16} /> Download CSV source
+                      <FileSpreadsheetIcon size={16} /> Tải tệp CSV gốc
                     </a>
                   )}
                 </div>
@@ -321,24 +316,32 @@ export default function Chat(props: ChatProps) {
                     key={item.id}
                     item={item}
                     busy={props.busy}
-                    dateValue={props.dateInputs[item.id] ?? item.transactionDate ?? ''}
-                    periodValue={props.periodInputs[item.id] ?? item.dayPeriod ?? ''}
-                    descriptionValue={
-                      props.textInputs[item.id]?.description ?? item.description ?? ''
+                    dateValue={
+                      props.itemEdits[item.id]?.transactionDate ?? item.transactionDate ?? ''
                     }
-                    amountValue={props.textInputs[item.id]?.amount ?? item.amount?.amount ?? ''}
-                    currencyValue={props.textInputs[item.id]?.currency ?? item.currency ?? ''}
-                    kindValue={props.textInputs[item.id]?.kind ?? item.kind}
-                    categoryValue={props.textInputs[item.id]?.category ?? item.category}
-                    localTimeValue={props.textInputs[item.id]?.localTime ?? item.localTime ?? ''}
-                    onDateChange={(value) => props.onDateChange(item.id, value)}
-                    onPeriodChange={(value) => props.onPeriodChange(item.id, value)}
-                    onDescriptionChange={(value) => props.onDescriptionChange(item.id, value)}
-                    onAmountChange={(value) => props.onAmountChange(item.id, value)}
-                    onCurrencyChange={(value) => props.onCurrencyChange(item.id, value)}
-                    onKindChange={(value) => props.onKindChange(item.id, value)}
-                    onCategoryChange={(value) => props.onCategoryChange(item.id, value)}
-                    onLocalTimeChange={(value) => props.onLocalTimeChange(item.id, value)}
+                    periodValue={props.itemEdits[item.id]?.dayPeriod ?? item.dayPeriod ?? ''}
+                    descriptionValue={
+                      props.itemEdits[item.id]?.description ?? item.description ?? ''
+                    }
+                    amountValue={props.itemEdits[item.id]?.amount ?? item.amount?.amount ?? ''}
+                    currencyValue={props.itemEdits[item.id]?.currency ?? item.currency ?? ''}
+                    kindValue={props.itemEdits[item.id]?.kind ?? item.kind}
+                    categoryValue={props.itemEdits[item.id]?.category ?? item.category}
+                    localTimeValue={props.itemEdits[item.id]?.localTime ?? item.localTime ?? ''}
+                    onDateChange={(value) =>
+                      props.onItemEditChange(item.id, 'transactionDate', value)
+                    }
+                    onPeriodChange={(value) => props.onItemEditChange(item.id, 'dayPeriod', value)}
+                    onDescriptionChange={(value) =>
+                      props.onItemEditChange(item.id, 'description', value)
+                    }
+                    onAmountChange={(value) => props.onItemEditChange(item.id, 'amount', value)}
+                    onCurrencyChange={(value) => props.onItemEditChange(item.id, 'currency', value)}
+                    onKindChange={(value) => props.onItemEditChange(item.id, 'kind', value)}
+                    onCategoryChange={(value) => props.onItemEditChange(item.id, 'category', value)}
+                    onLocalTimeChange={(value) =>
+                      props.onItemEditChange(item.id, 'localTime', value)
+                    }
                     onSave={() => props.onSaveFacts(item)}
                     onConfirm={() => props.onConfirm(item)}
                   />
@@ -351,7 +354,7 @@ export default function Chat(props: ChatProps) {
                 className={`chat-bubble ${turn.role === 'user' ? 'chat-user-bubble' : 'chat-assistant-bubble'}`}
               >
                 <span className="chat-turn-speaker">
-                  {turn.role === 'user' ? 'You' : 'Where my bucks go?'}
+                  {turn.role === 'user' ? 'Bạn' : 'Where my bucks go?'}
                 </span>
                 <p>{turn.text}</p>
               </div>
@@ -364,7 +367,7 @@ export default function Chat(props: ChatProps) {
                 props.onNewDraft();
               }}
             >
-              New transaction
+              Giao dịch mới
             </button>
           </div>
         )}
@@ -375,11 +378,11 @@ export default function Chat(props: ChatProps) {
       >
         {previewUrl && file && (
           <div className="chat-attachment">
-            <img src={previewUrl} alt="Image to upload" />
+            <img src={previewUrl} alt="Ảnh sẽ được gửi" />
             <span>{file.name}</span>
             <button
               type="button"
-              aria-label="Remove attached image"
+              aria-label="Xoá ảnh đã đính kèm"
               onClick={() => {
                 setFile(null);
                 setPreviewUrl(null);
@@ -390,7 +393,7 @@ export default function Chat(props: ChatProps) {
           </div>
         )}
         <label className="visually-hidden" htmlFor="chat-message">
-          Message Where my bucks go?
+          Nhắn cho Where my bucks go?
         </label>
         <textarea
           ref={messageInput}
@@ -403,7 +406,7 @@ export default function Chat(props: ChatProps) {
           onPaste={pasteImage}
           rows={1}
           maxLength={8_000}
-          placeholder="Message"
+          placeholder="Nhắn tin…"
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
@@ -413,7 +416,7 @@ export default function Chat(props: ChatProps) {
         />
         {activeMode === 'transaction' && file && props.text.trim() && (
           <p className="chat-hint" role="status">
-            Images and text are processed separately. Send one at a time.
+            Ảnh và văn bản được xử lý riêng. Gửi từng loại một lần.
           </p>
         )}
         {activeMode === 'transaction' && duplicateDetected && (
@@ -426,7 +429,7 @@ export default function Chat(props: ChatProps) {
                 setIdempotencyKey(crypto.randomUUID());
               }}
             />
-            I want to create another draft from this image.
+            Tôi muốn tạo bản nháp khác từ ảnh này.
           </label>
         )}
         <div className="chat-composer-actions">
@@ -435,7 +438,7 @@ export default function Chat(props: ChatProps) {
             className="visually-hidden"
             type="file"
             accept="image/jpeg,image/png,image/webp"
-            aria-label="Choose receipt image"
+            aria-label="Chọn ảnh hoá đơn"
             onChange={(event) => {
               chooseImage(event.currentTarget.files?.[0] ?? null);
               event.currentTarget.value = '';
@@ -444,8 +447,8 @@ export default function Chat(props: ChatProps) {
           <button
             type="button"
             className="chat-attach-button"
-            aria-label="Attach image"
-            title="Attach image"
+            aria-label="Đính kèm ảnh"
+            title="Đính kèm ảnh"
             onClick={() => fileInput.current?.click()}
             disabled={props.busy}
           >
@@ -455,7 +458,7 @@ export default function Chat(props: ChatProps) {
           <button
             type="submit"
             className="chat-send-button"
-            aria-label="Send message"
+            aria-label="Gửi tin nhắn"
             disabled={
               props.busy ||
               !(file || props.text.trim()) ||
@@ -463,7 +466,7 @@ export default function Chat(props: ChatProps) {
               (Boolean(file) && duplicateDetected && !allowDuplicate)
             }
           >
-            {props.busy ? 'Working…' : 'Send'}
+            {props.busy ? 'Đang xử lý…' : 'Gửi'}
           </button>
         </div>
       </form>

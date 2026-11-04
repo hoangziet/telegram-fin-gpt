@@ -37,7 +37,9 @@ def _draft(client: FlaskClient, text: str) -> dict[str, Any]:
     response = client.post("/api/drafts", json={"text": text}, headers={"Idempotency-Key": str(uuid4())})
     assert response.status_code == 201
     assert response.json is not None
-    return response.json["draft"]
+    body: dict[str, Any] = response.json
+    draft: dict[str, Any] = body["draft"]
+    return draft
 
 
 def test_chat_requires_auth_csrf_and_configured_assistant(draft_app: tuple[Flask, FlaskClient, UUID]) -> None:
@@ -46,7 +48,8 @@ def test_chat_requires_auth_csrf_and_configured_assistant(draft_app: tuple[Flask
     assert anonymous.post("/api/chat/ask", json={"question": "hello", "language": "en"}).status_code == 401
     response = client.post("/api/chat/ask", json={"question": "hello", "language": "en"})
     assert response.status_code == 503
-    assert response.get_json()["error"]["code"] == "chat_unavailable"
+    assert response.json is not None
+    assert response.json["error"]["code"] == "chat_unavailable"
     client.environ_base["HTTP_X_CSRF_TOKEN"] = "invalid"
     assert client.post("/api/chat/ask", json={"question": "hello", "language": "en"}).status_code == 403
 
@@ -57,7 +60,8 @@ def test_qa_uses_only_owner_monthly_aggregates_without_writes(draft_app: tuple[F
     app.extensions["chat_assistant"] = stub
     response = client.post("/api/chat/ask", json={"question": "How much did I spend this month?", "language": "en"})
     assert response.status_code == 200
-    assert "No recorded spending" in response.get_json()["answer"]
+    assert response.json is not None
+    assert "No recorded spending" in response.json["answer"]
     assert stub.context is not None and stub.context["totals"] == []
     assert "timezone" in stub.context
     with Session(app.extensions["database_engine"]) as database:
@@ -78,8 +82,9 @@ def test_unified_chat_coordinates_transaction_and_question_agents(
         headers={"Idempotency-Key": request_key},
     )
     assert transaction.status_code == 201
-    assert transaction.get_json()["intent"] == "transaction"
-    draft = transaction.get_json()["draft"]
+    assert transaction.json is not None
+    assert transaction.json["intent"] == "transaction"
+    draft = transaction.json["draft"]
     assert draft["evidence"]["sourceText"] == "Ăn phở 50k"
     assert draft["items"][0]["status"] == "incomplete"
     replay = client.post(
@@ -88,15 +93,17 @@ def test_unified_chat_coordinates_transaction_and_question_agents(
         headers={"Idempotency-Key": request_key},
     )
     assert replay.status_code == 200
-    assert replay.get_json()["draft"]["id"] == draft["id"]
+    assert replay.json is not None
+    assert replay.json["draft"]["id"] == draft["id"]
 
     question = client.post(
         url,
         json={"message": "How much did I spend this month?", "language": "en"},
     )
     assert question.status_code == 200
-    assert question.get_json()["intent"] == "question"
-    assert "No recorded spending" in question.get_json()["answer"]
+    assert question.json is not None
+    assert question.json["intent"] == "question"
+    assert "No recorded spending" in question.json["answer"]
     with Session(app.extensions["database_engine"]) as database:
         assert database.scalar(select(func.count()).select_from(Transaction)) == 0
 
@@ -120,7 +127,8 @@ def test_unified_chat_rejects_foreign_currency_instead_of_assuming_vnd(
         headers={"Idempotency-Key": str(uuid4())},
     )
     assert response.status_code == 422
-    assert response.get_json()["error"]["code"] == "unsupported_currency"
+    assert response.json is not None
+    assert response.json["error"]["code"] == "unsupported_currency"
 
 
 def test_unified_chat_routes_followups_to_clarification_or_question_agent(
@@ -141,9 +149,10 @@ def test_unified_chat_routes_followups_to_clarification_or_question_agent(
         json={"message": "sáng hôm qua", "language": "vi", "draftContext": context},
     )
     assert clarification.status_code == 200
-    assert clarification.get_json()["intent"] == "clarification"
-    assert clarification.get_json()["item"]["status"] == "incomplete"
-    assert clarification.get_json()["item"]["missingFields"] == ["localTime"]
+    assert clarification.json is not None
+    assert clarification.json["intent"] == "clarification"
+    assert clarification.json["item"]["status"] == "incomplete"
+    assert clarification.json["item"]["missingFields"] == ["localTime"]
 
     question = client.post(
         "/api/chat/message",
@@ -154,7 +163,8 @@ def test_unified_chat_routes_followups_to_clarification_or_question_agent(
         },
     )
     assert question.status_code == 200
-    assert question.get_json()["intent"] == "question"
+    assert question.json is not None
+    assert question.json["intent"] == "question"
 
 
 def test_clear_meal_total_becomes_one_draft_and_only_asks_for_clock_time(
@@ -243,19 +253,21 @@ def test_chat_reply_updates_only_missing_date_period_and_never_confirms(
     body = {"itemId": item["id"], "expectedVersion": item["version"], "text": "2026-11-03 sáng"}
     updated = client.post(url, json=body)
     assert updated.status_code == 200
-    assert updated.get_json()["item"]["status"] == "incomplete"
-    assert updated.get_json()["item"]["transactionDate"] == "2026-11-03"
+    assert updated.json is not None
+    assert updated.json["item"]["status"] == "incomplete"
+    assert updated.json["item"]["transactionDate"] == "2026-11-03"
     time_reply = client.post(
         url,
         json={
             "itemId": item["id"],
-            "expectedVersion": updated.get_json()["item"]["version"],
+            "expectedVersion": updated.json["item"]["version"],
             "text": "8h",
         },
     )
     assert time_reply.status_code == 200
-    assert time_reply.get_json()["item"]["status"] == "ready"
-    assert time_reply.get_json()["item"]["localTime"] == "08:00"
+    assert time_reply.json is not None
+    assert time_reply.json["item"]["status"] == "ready"
+    assert time_reply.json["item"]["localTime"] == "08:00"
     assert client.post(url, json=body).status_code == 409
     with Session(app.extensions["database_engine"]) as database:
         assert database.scalar(select(func.count()).select_from(Transaction)) == 0
@@ -281,9 +293,10 @@ def test_english_period_reply_does_not_infer_missing_date(draft_app: tuple[Flask
         json={"itemId": item["id"], "expectedVersion": item["version"], "text": "morning"},
     )
     assert response.status_code == 200
-    assert response.get_json()["item"]["dayPeriod"] == "morning"
-    assert response.get_json()["item"]["transactionDate"] is None
-    assert response.get_json()["item"]["status"] == "incomplete"
+    assert response.json is not None
+    assert response.json["item"]["dayPeriod"] == "morning"
+    assert response.json["item"]["transactionDate"] is None
+    assert response.json["item"]["status"] == "incomplete"
 
 
 def test_foundry_chat_keeps_question_as_data_and_rejects_bad_output() -> None:

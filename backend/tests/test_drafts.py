@@ -368,6 +368,7 @@ def test_confirmed_transaction_edit_delete_and_undo_use_durable_previews(
     )
     assert confirmed.json is not None
     transaction_id = confirmed.json["transaction"]["id"]
+    assert confirmed.json["transaction"]["isDeleted"] is False
 
     proposed = client.post(
         f"/api/transactions/{transaction_id}/changes",

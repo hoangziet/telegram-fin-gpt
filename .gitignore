@@ -32,8 +32,6 @@ dist/
 .terraform/
 .local/evidence/
 midscene_run/
-.playwright-cli/
-.hallmark/
 
 # OS
 .DS_Store

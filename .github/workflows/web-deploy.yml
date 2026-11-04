@@ -58,3 +58,10 @@ jobs:
             --retry 6 --retry-delay 10 --retry-all-errors \
             https://ambitious-beach-0f2a4c700.8.azurestaticapps.net/ \
             | grep -q 'Where my bucks go?'
+      - name: Record the deployed URL
+        run: |
+          {
+            echo "### Deployed dev web"
+            echo "- URL: https://ambitious-beach-0f2a4c700.8.azurestaticapps.net/"
+            echo "- Commit: ${{ github.event.workflow_run.head_sha }}"
+          } >> "$GITHUB_STEP_SUMMARY"

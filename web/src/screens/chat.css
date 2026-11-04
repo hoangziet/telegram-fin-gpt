@@ -142,6 +142,13 @@
   margin-top: 10px;
   margin-bottom: 20px;
 }
+.chat-draft-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .chat-composer {
   position: relative;
   bottom: auto;

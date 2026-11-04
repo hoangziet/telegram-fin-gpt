@@ -13,6 +13,9 @@ implement or deploy it.
 - Never deploy to Azure or change cloud resources, credentials, or production
   data solely because a plan describes them. Follow the user's approved scope.
 - Inspect the working tree before edits. Preserve unrelated user changes.
+- After implementing and deploying an approved change through an existing,
+  already-configured pipeline, report the resulting live URL and what to test
+  back to the user in chat.
 
 ## Architecture and behavior
 
@@ -44,6 +47,11 @@ implement or deploy it.
   delivery from a queue or webhook.
 - Do not log secrets or raw financial content. Protect private source files and
   provide a defined retention and deletion policy before storing them in cloud.
+- LLM-based routing or specialist agents may classify intent or assist
+  extraction, but only the deterministic confirmation endpoints may create or
+  modify a transaction. No agent may call a write or confirm path directly, and
+  any agent must degrade safely (fallback or honest unavailability) rather than
+  block the user or fabricate a result.
 
 ## Code quality
 

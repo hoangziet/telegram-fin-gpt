@@ -1,6 +1,7 @@
-import type { TotalsReport, TransactionRecord } from '../api/finances';
+import { useEffect, useState } from 'react';
+import { getInsight, type TotalsReport, type TransactionRecord } from '../api/finances';
 import { formatMoney } from '../utils/financeFormatters';
-import { t, useLanguage } from '../i18n';
+import { SparklesIcon } from './Icons';
 import overviewEmpty from '../assets/overview-empty.png';
 
 interface DashboardInsightsProps {
@@ -39,8 +40,16 @@ function percentage(amount: bigint, total: bigint): number {
 }
 
 export default function DashboardInsights({ report, transactions }: DashboardInsightsProps) {
-  const { language } = useLanguage();
-  const label = (value: string) => t(language, value);
+  const [insight, setInsight] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void getInsight().then((answer) => {
+      if (active) setInsight(answer);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
   const income = report?.totals.find((row) => row.kind === 'income' && row.currency === 'VND');
   const expense = report?.totals.find((row) => row.kind === 'expense' && row.currency === 'VND');
   const incomeLabel = formatMoney({ amount: income?.amount ?? '0', currency: 'VND' });
@@ -78,95 +87,101 @@ export default function DashboardInsights({ report, transactions }: DashboardIns
   });
 
   return (
-    <section className="insights-grid" aria-label={'Cash flow and category charts'}>
-      <div className="bento-card insight-card">
-        <div className="insight-heading">
-          <div>
-            <span className="eyebrow">{label('Phân tích tháng')}</span>
-            <h2 className="card-title">{label('Dòng tiền tổng quan')}</h2>
-          </div>
-          <span className="insight-period">
-            {report?.fromDate.slice(0, 7) ?? label('Tháng này')}
-          </span>
-        </div>
-        <p className="insight-caption">{label('So sánh tiền vào và tiền ra đã xác nhận · VND')}</p>
-        {report ? (
-          <div
-            className="cashflow-chart"
-            role="img"
-            aria-label={`Thu ${incomeLabel}; chi ${expenseLabel}`}
-          >
-            <div className="cashflow-row">
-              <span>{label('Thu nhập')}</span>
-              <div className="cashflow-track">
-                <span
-                  className="cashflow-fill cashflow-income"
-                  style={{ width: `${(incomeAmount / largest) * 100}%` }}
-                />
-              </div>
-              <strong>{incomeLabel}</strong>
-            </div>
-            <div className="cashflow-row">
-              <span>{label('Chi tiêu')}</span>
-              <div className="cashflow-track">
-                <span
-                  className="cashflow-fill cashflow-expense"
-                  style={{ width: `${(expenseAmount / largest) * 100}%` }}
-                />
-              </div>
-              <strong>{expenseLabel}</strong>
-            </div>
-          </div>
-        ) : (
-          <p className="insight-empty">{label('Đang tải số liệu tháng này…')}</p>
-        )}
-        <p className="insight-footnote">{label('Tổng quan chỉ hiển thị VND.')}</p>
-      </div>
-      <div className="bento-card insight-card">
-        <div className="insight-heading">
-          <div>
-            <span className="eyebrow">{label('Giao dịch gần đây')}</span>
-            <h2 className="card-title">{label('Chi tiêu theo danh mục')}</h2>
-          </div>
-          <span className="insight-period">{transactions.length} items</span>
-        </div>
-        {total > 0n ? (
-          <div className="category-chart">
-            <div
-              className="category-donut"
-              style={{ background: `conic-gradient(${segments.join(', ')})` }}
-              aria-hidden="true"
-            >
-              <div className="donut-center">
-                <span>{label('Tổng gần đây')}</span>
-                <strong>{formatMoney({ amount: decimalAmount(total), currency: 'VND' })}</strong>
-              </div>
-            </div>
-            <ul className="category-legend">
-              {categories.map(([category, amount], index) => (
-                <li key={category}>
-                  <span className="legend-name">
-                    <span
-                      className="legend-dot"
-                      style={{ background: COLORS[index % COLORS.length] }}
-                    />
-                    {category}
-                  </span>
-                  <strong>{Math.round(percentage(amount, total))}%</strong>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <div className="insight-empty">
-            <img src={overviewEmpty} alt="" />
-            <p>{label('Chưa có khoản chi VND trong các giao dịch gần đây.')}</p>
-          </div>
-        )}
-        <p className="insight-footnote">
-          {label('Phân bổ từ các giao dịch gần đây đang hiển thị, không phải toàn bộ tháng.')}
+    <>
+      {insight && (
+        <p className="insight-narrative">
+          <SparklesIcon size={16} />
+          {insight}
         </p>
-      </div>
-    </section>
+      )}
+      <section className="insights-grid" aria-label={'Biểu đồ dòng tiền và danh mục chi tiêu'}>
+        <div className="bento-card insight-card">
+          <div className="insight-heading">
+            <div>
+              <span className="eyebrow">{'Phân tích tháng'}</span>
+              <h2 className="card-title">{'Dòng tiền tổng quan'}</h2>
+            </div>
+            <span className="insight-period">{report?.fromDate.slice(0, 7) ?? 'Tháng này'}</span>
+          </div>
+          <p className="insight-caption">{'So sánh tiền vào và tiền ra đã xác nhận · VND'}</p>
+          {report ? (
+            <div
+              className="cashflow-chart"
+              role="img"
+              aria-label={`Thu ${incomeLabel}; chi ${expenseLabel}`}
+            >
+              <div className="cashflow-row">
+                <span>{'Thu nhập'}</span>
+                <div className="cashflow-track">
+                  <span
+                    className="cashflow-fill cashflow-income"
+                    style={{ width: `${(incomeAmount / largest) * 100}%` }}
+                  />
+                </div>
+                <strong>{incomeLabel}</strong>
+              </div>
+              <div className="cashflow-row">
+                <span>{'Chi tiêu'}</span>
+                <div className="cashflow-track">
+                  <span
+                    className="cashflow-fill cashflow-expense"
+                    style={{ width: `${(expenseAmount / largest) * 100}%` }}
+                  />
+                </div>
+                <strong>{expenseLabel}</strong>
+              </div>
+            </div>
+          ) : (
+            <p className="insight-empty">{'Đang tải số liệu tháng này…'}</p>
+          )}
+          <p className="insight-footnote">{'Tổng quan chỉ hiển thị VND.'}</p>
+        </div>
+        <div className="bento-card insight-card">
+          <div className="insight-heading">
+            <div>
+              <span className="eyebrow">{'Giao dịch gần đây'}</span>
+              <h2 className="card-title">{'Chi tiêu theo danh mục'}</h2>
+            </div>
+            <span className="insight-period">{transactions.length} khoản</span>
+          </div>
+          {total > 0n ? (
+            <div className="category-chart">
+              <div
+                className="category-donut"
+                style={{ background: `conic-gradient(${segments.join(', ')})` }}
+                aria-hidden="true"
+              >
+                <div className="donut-center">
+                  <span>{'Tổng gần đây'}</span>
+                  <strong>{formatMoney({ amount: decimalAmount(total), currency: 'VND' })}</strong>
+                </div>
+              </div>
+              <ul className="category-legend">
+                {categories.map(([category, amount], index) => (
+                  <li key={category}>
+                    <span className="legend-name">
+                      <span
+                        className="legend-dot"
+                        style={{ background: COLORS[index % COLORS.length] }}
+                      />
+                      {category}
+                    </span>
+                    <strong>{Math.round(percentage(amount, total))}%</strong>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div className="insight-empty">
+              <img src={overviewEmpty} alt="" />
+              <p>{'Chưa có khoản chi VND trong các giao dịch gần đây.'}</p>
+            </div>
+          )}
+          <p className="insight-footnote">
+            {'Phân bổ từ các giao dịch gần đây đang hiển thị, không phải toàn bộ tháng.'}
+          </p>
+        </div>
+      </section>
+    </>
   );
 }

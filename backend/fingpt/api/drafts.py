@@ -273,6 +273,7 @@ def _serialize_transaction(transaction: Any) -> dict[str, Any]:
         "localTime": transaction.local_time.isoformat(timespec="minutes") if transaction.local_time else None,
         "dayPeriod": transaction.day_period,
         "timezone": transaction.timezone,
+        "isDeleted": transaction.is_deleted,
     }
 
 

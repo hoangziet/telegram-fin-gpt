@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from fingpt.adapters.foundry_chat import ChatInferenceError
 from fingpt.services.chat import NoClarification, clarify_item, monthly_summary
-from fingpt.services.chat_orchestration import ChatIntent, is_explicit_question, resolve_chat_intent
+from fingpt.services.chat_orchestration import ChatIntent, ChatOrchestrator, is_explicit_question
 from fingpt.services.drafts import (
     ConversationNotFound,
     DraftConfirmationConflict,
@@ -94,9 +94,14 @@ def message() -> tuple[Any, int]:
         return _error("invalid_history", "Chat history is invalid."), 422
 
     message_text = text.strip()
-    intent = resolve_chat_intent(message_text)
+    orchestrator: ChatOrchestrator = current_app.extensions["chat_orchestrator"]
+    intent = orchestrator.route(message_text, has_pending_clarification=payload.get("draftContext") is not None)
     if intent is ChatIntent.TRANSACTION:
         return _create_transaction_draft(message_text)
+    if intent is ChatIntent.INSIGHT:
+        if len(message_text) > 1_000:
+            return _error("invalid_question", "Questions must be at most 1,000 characters."), 422
+        return _answer_insight(language)
 
     draft_context, context_error = _validated_draft_context(payload.get("draftContext"))
     if context_error is not None:
@@ -219,6 +224,29 @@ def _answer_question(text: str, language: str, history: list[dict[str, str]]) ->
     if not isinstance(answer, str) or not answer.strip() or len(answer) > 8_000:
         return _error("invalid_answer", "AI chat returned an invalid answer."), 503
     return jsonify(intent=ChatIntent.QUESTION, answer=answer), 200
+
+
+@CHAT_BLUEPRINT.get("/insight")
+def insight() -> tuple[Any, int]:
+    """Return one read-only spending-trend sentence for the Dashboard widget."""
+    language = request.args.get("language", "vi")
+    if language not in ("vi", "en"):
+        return _error("invalid_language", "Choose vi or en."), 422
+    return _answer_insight(language)
+
+
+def _answer_insight(language: str) -> tuple[Any, int]:
+    """Send a trend/comparison question to the read-only insight specialist."""
+    specialist = current_app.extensions.get("insight_specialist")
+    if specialist is None:
+        return _error("chat_unavailable", "AI chat is not configured."), 503
+    database: Session = g.database_session
+    try:
+        answer = specialist.narrate(database, g.auth_user.id, language=language)
+    except SQLAlchemyError:
+        current_app.logger.warning("Insight query failed")
+        return _error("service_unavailable", "Chat data is temporarily unavailable."), 503
+    return jsonify(intent=ChatIntent.INSIGHT, answer=answer), 200
 
 
 def _valid_history(history: Any) -> bool:

@@ -34,8 +34,6 @@ import '../product.css';
 import './transaction-history.css';
 import '../reference-theme.css';
 import './chat.css';
-import '../responsive-theme.css';
-import { t, useLanguage } from '../i18n';
 import appIcon from '../assets/icon-512.png';
 
 interface FinancesProps {
@@ -53,8 +51,6 @@ export default function Finances({
   errorMessage,
   onLogout,
 }: FinancesProps) {
-  const { language } = useLanguage();
-  const label = (value: string) => t(language, value);
   const [view, setView] = useState<View>(() => readViewFromUrl());
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
   const [report, setReport] = useState<TotalsReport | null>(null);
@@ -69,9 +65,7 @@ export default function Finances({
   const [error, setError] = useState('');
   const [evidence, setEvidence] = useState<EvidenceRecord | null>(null);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
-  const [dateInputs, setDateInputs] = useState<Record<string, string>>({});
-  const [periodInputs, setPeriodInputs] = useState<Record<string, string>>({});
-  const [textInputs, setTextInputs] = useState<Record<string, DraftEditInputs>>({});
+  const [itemEdits, setItemEdits] = useState<Record<string, DraftEditInputs>>({});
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const accountTriggerRef = useRef<HTMLButtonElement>(null);
@@ -151,30 +145,42 @@ export default function Finances({
     };
   }, []);
 
+  function updateItemEdit(id: string, field: keyof DraftEditInputs, value: string) {
+    setItemEdits((current) => ({
+      ...current,
+      [id]: { ...current[id], [field]: value } as DraftEditInputs,
+    }));
+  }
+
   async function saveMissingFacts(item: DraftItem) {
     if (!draft) return;
     setBusy(true);
     setError('');
+    const edit = itemEdits[item.id];
     try {
       const updated = await updateDraftItem(
         draft.id,
         item,
         {
-          transactionDate: dateInputs[item.id] ?? item.transactionDate ?? '',
-          dayPeriod: periodInputs[item.id] ?? item.dayPeriod ?? '',
-          description: textInputs[item.id]?.description ?? item.description ?? '',
-          amount: textInputs[item.id]?.amount ?? item.amount?.amount ?? '',
-          currency: textInputs[item.id]?.currency ?? item.currency ?? '',
-          localTime: textInputs[item.id]?.localTime ?? item.localTime ?? '',
-          kind: textInputs[item.id]?.kind ?? item.kind,
-          category: textInputs[item.id]?.category ?? item.category,
+          transactionDate: edit?.transactionDate ?? item.transactionDate ?? '',
+          dayPeriod: edit?.dayPeriod ?? item.dayPeriod ?? '',
+          description: edit?.description ?? item.description ?? '',
+          amount: edit?.amount ?? item.amount?.amount ?? '',
+          currency: edit?.currency ?? item.currency ?? '',
+          localTime: edit?.localTime ?? item.localTime ?? '',
+          kind: edit?.kind ?? item.kind,
+          category: edit?.category ?? item.category,
         },
         csrfToken,
       );
-      setDraft({
-        ...draft,
-        items: draft.items.map((candidate) => (candidate.id === item.id ? updated : candidate)),
-      });
+      setDraft((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((candidate) => (candidate.id === item.id ? updated : candidate)),
+            }
+          : current,
+      );
     } catch (reason) {
       setError(messageFor(reason));
     } finally {
@@ -193,17 +199,7 @@ export default function Finances({
           }
         : current,
     );
-    setTextInputs((current) => {
-      const next = { ...current };
-      delete next[updated.id];
-      return next;
-    });
-    setDateInputs((current) => {
-      const next = { ...current };
-      delete next[updated.id];
-      return next;
-    });
-    setPeriodInputs((current) => {
+    setItemEdits((current) => {
       const next = { ...current };
       delete next[updated.id];
       return next;
@@ -216,12 +212,16 @@ export default function Finances({
     setError('');
     try {
       await confirmDraftItem(draft.id, item, csrfToken);
-      setDraft({
-        ...draft,
-        items: draft.items.map((candidate) =>
-          candidate.id === item.id ? { ...candidate, status: 'confirmed' } : candidate,
-        ),
-      });
+      setDraft((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((candidate) =>
+                candidate.id === item.id ? { ...candidate, status: 'confirmed' } : candidate,
+              ),
+            }
+          : current,
+      );
       await refreshTransactions();
     } catch (reason) {
       setError(messageFor(reason));
@@ -256,7 +256,7 @@ export default function Finances({
   }
 
   return (
-    <div className="finance-shell" data-theme="finance" lang={language}>
+    <div className="finance-shell" data-theme="finance" lang="vi">
       {/* Modern Sidebar */}
       <aside className="product-sidebar">
         <div className="brand-header">
@@ -267,7 +267,7 @@ export default function Finances({
           </a>
         </div>
 
-        <nav className="main-nav" aria-label="Main navigation">
+        <nav className="main-nav" aria-label="Điều hướng chính">
           <button
             type="button"
             className={`nav-button ${view === 'dashboard' ? 'is-active' : ''}`}
@@ -275,7 +275,7 @@ export default function Finances({
             onClick={() => setView('dashboard')}
           >
             <DashboardIcon size={20} />
-            <span>{label('Tổng quan')}</span>
+            <span>{'Tổng quan'}</span>
           </button>
           <button
             type="button"
@@ -284,7 +284,7 @@ export default function Finances({
             onClick={() => setView('chat')}
           >
             <ChatIcon size={20} />
-            <span>{label('Trò chuyện')}</span>
+            <span>{'Trò chuyện'}</span>
           </button>
           <button
             type="button"
@@ -293,7 +293,7 @@ export default function Finances({
             onClick={() => setView('history')}
           >
             <HistoryIcon size={20} />
-            <span>{label('Giao dịch')}</span>
+            <span>{'Giao dịch'}</span>
           </button>
         </nav>
 
@@ -303,7 +303,7 @@ export default function Finances({
             ref={accountTriggerRef}
             className="account-trigger"
             type="button"
-            aria-label={`Account menu for ${username}`}
+            aria-label={`Menu tài khoản của ${username}`}
             aria-haspopup="menu"
             aria-expanded={accountMenuOpen}
             aria-controls="account-menu"
@@ -317,7 +317,7 @@ export default function Finances({
                 <span className="user-name" title={username}>
                   {username}
                 </span>
-                <span className="user-role">Account owner</span>
+                <span className="user-role">Chủ tài khoản</span>
               </span>
             </span>
             <svg className="account-chevron" viewBox="0 0 16 16" aria-hidden="true">
@@ -325,7 +325,7 @@ export default function Finances({
             </svg>
           </button>
           {accountMenuOpen && (
-            <div className="account-menu" id="account-menu" role="menu" aria-label="Account">
+            <div className="account-menu" id="account-menu" role="menu" aria-label="Tài khoản">
               <button
                 ref={signOutRef}
                 className="account-menu-item"
@@ -338,7 +338,7 @@ export default function Finances({
                 disabled={isSubmitting}
               >
                 <SignOutIcon size={17} />
-                <span>{isSubmitting ? 'Signing out…' : 'Sign out'}</span>
+                <span>{isSubmitting ? 'Đang thoát…' : 'Đăng xuất'}</span>
               </button>
             </div>
           )}
@@ -350,118 +350,94 @@ export default function Finances({
         {errorMessage && (
           <div className="system-alert alert-error" role="alert">
             <AlertCircleIcon size={18} />
-            <span>{label(errorMessage)}</span>
+            <span>{errorMessage}</span>
           </div>
         )}
         {error && (
           <div className="system-alert alert-error" role="alert">
             <AlertCircleIcon size={18} />
-            <span>{label(error)}</span>
+            <span>{error}</span>
           </div>
         )}
 
-        {view === 'dashboard' && (
-          <Dashboard
-            transactions={transactions.filter((item) => !item.isDeleted).slice(0, 6)}
-            report={report}
-          />
-        )}
+        <div className="view-transition" key={view}>
+          {view === 'dashboard' && (
+            <Dashboard
+              transactions={transactions.filter((item) => !item.isDeleted).slice(0, 6)}
+              report={report}
+            />
+          )}
 
-        {view === 'chat' && (
-          <Chat
-            csrfToken={csrfToken}
-            busy={busy}
-            draft={draft}
-            pendingDraft={pendingDraft}
-            onResume={() => {
-              if (pendingDraft) {
-                setDraft(pendingDraft);
-                setPendingDraft(null);
-                setView('chat');
-              }
-            }}
-            onNewDraft={() => {
-              if (
-                draft?.items.some((item) => item.status === 'incomplete' || item.status === 'ready')
-              ) {
-                setPendingDraft((current) => current ?? draft);
-              }
-              setDraft(null);
-            }}
-            onDraftItemChange={acceptClarifiedItem}
-            turns={chatTurns}
-            onTurnsChange={setChatTurns}
-            text={text}
-            dateInputs={dateInputs}
-            periodInputs={periodInputs}
-            textInputs={textInputs}
-            onTextChange={setText}
-            onDateChange={(id, value) => setDateInputs({ ...dateInputs, [id]: value })}
-            onPeriodChange={(id, value) => setPeriodInputs({ ...periodInputs, [id]: value })}
-            onDescriptionChange={(id, value) =>
-              setTextInputs({
-                ...textInputs,
-                [id]: { ...textInputs[id], description: value },
-              })
-            }
-            onAmountChange={(id, value) =>
-              setTextInputs({
-                ...textInputs,
-                [id]: { ...textInputs[id], amount: value },
-              })
-            }
-            onCurrencyChange={(id, value) =>
-              setTextInputs({
-                ...textInputs,
-                [id]: { ...textInputs[id], currency: value },
-              })
-            }
-            onKindChange={(id, value) =>
-              setTextInputs({ ...textInputs, [id]: { ...textInputs[id], kind: value } })
-            }
-            onCategoryChange={(id, value) =>
-              setTextInputs({ ...textInputs, [id]: { ...textInputs[id], category: value } })
-            }
-            onLocalTimeChange={(id, value) =>
-              setTextInputs({ ...textInputs, [id]: { ...textInputs[id], localTime: value } })
-            }
-            onPreview={(nextDraft) => {
-              if (
-                draft &&
-                draft.items.some((item) => item.status === 'incomplete' || item.status === 'ready')
-              ) {
-                setPendingDraft((current) => current ?? draft);
-              }
-              setDraft(nextDraft);
-              setEvidence(null);
-            }}
-            onBusyChange={setBusy}
-            onSaveFacts={saveMissingFacts}
-            onConfirm={confirmItem}
-            onError={setError}
-          />
-        )}
+          {view === 'chat' && (
+            <Chat
+              csrfToken={csrfToken}
+              busy={busy}
+              draft={draft}
+              pendingDraft={pendingDraft}
+              onResume={() => {
+                if (pendingDraft) {
+                  setDraft(pendingDraft);
+                  setPendingDraft(null);
+                  setView('chat');
+                }
+              }}
+              onNewDraft={() => {
+                if (
+                  draft?.items.some(
+                    (item) => item.status === 'incomplete' || item.status === 'ready',
+                  )
+                ) {
+                  setPendingDraft((current) => current ?? draft);
+                }
+                setDraft(null);
+              }}
+              onDraftItemChange={acceptClarifiedItem}
+              turns={chatTurns}
+              onTurnsChange={setChatTurns}
+              text={text}
+              itemEdits={itemEdits}
+              onTextChange={setText}
+              onItemEditChange={updateItemEdit}
+              onPreview={(nextDraft) => {
+                if (
+                  draft &&
+                  draft.items.some(
+                    (item) => item.status === 'incomplete' || item.status === 'ready',
+                  )
+                ) {
+                  setPendingDraft((current) => current ?? draft);
+                }
+                setDraft(nextDraft);
+                setEvidence(null);
+              }}
+              onBusyChange={setBusy}
+              onSaveFacts={saveMissingFacts}
+              onConfirm={confirmItem}
+              onError={setError}
+            />
+          )}
 
-        {view === 'history' && (
-          <History
-            csrfToken={csrfToken}
-            query={query}
-            onQueryChange={(value) => {
-              setError('');
-              setQuery(value);
-            }}
-            onEvidence={openEvidence}
-            evidence={evidence}
-            evidenceLoading={evidenceLoading}
-            onCloseEvidence={() => setEvidence(null)}
-            onChanged={refreshTransactions}
-            onError={setError}
-          />
-        )}
+          {view === 'history' && (
+            <History
+              csrfToken={csrfToken}
+              query={query}
+              onQueryChange={(value) => {
+                setError('');
+                setQuery(value);
+              }}
+              onEvidence={openEvidence}
+              evidence={evidence}
+              evidenceLoading={evidenceLoading}
+              onCloseEvidence={() => setEvidence(null)}
+              onChanged={refreshTransactions}
+              onError={setError}
+            />
+          )}
+        </div>
       </main>
 
       {/* Mobile Bottom Navigation Bar */}
-      <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
+      <nav className="mobile-bottom-nav" aria-label="Điều hướng trên di động">
         <button
           type="button"
           className={`mobile-nav-item ${view === 'dashboard' ? 'is-active' : ''}`}
@@ -469,7 +445,7 @@ export default function Finances({
           onClick={() => setView('dashboard')}
         >
           <DashboardIcon size={20} />
-          <span>{label('Tổng quan')}</span>
+          <span>{'Tổng quan'}</span>
         </button>
         <button
           type="button"
@@ -478,7 +454,7 @@ export default function Finances({
           onClick={() => setView('chat')}
         >
           <ChatIcon size={20} />
-          <span>{label('Trò chuyện')}</span>
+          <span>{'Trò chuyện'}</span>
         </button>
         <button
           type="button"
@@ -487,7 +463,7 @@ export default function Finances({
           onClick={() => setView('history')}
         >
           <HistoryIcon size={20} />
-          <span>{label('Giao dịch')}</span>
+          <span>{'Giao dịch'}</span>
         </button>
       </nav>
     </div>

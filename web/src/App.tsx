@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
 import { ApiError, getCurrentUser, getCsrfToken, login, logout, type AuthUser } from './api/client';
 import Finances from './screens/Finances';
-import { t, useLanguage } from './i18n';
 import './auth.css';
 import brandIcon from './assets/brand-icon.png';
 
 type ScreenState = 'checking' | 'signed-out' | 'signed-in' | 'unavailable';
 
 export default function App() {
-  const { language } = useLanguage();
-  const label = (value: string) => t(language, value);
   const [screen, setScreen] = useState<ScreenState>('checking');
   const [user, setUser] = useState<AuthUser | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
@@ -34,7 +31,7 @@ export default function App() {
         if (error instanceof ApiError && error.statusCode === 401) {
           setScreen('signed-out');
         } else {
-          setErrorMessage('Could not check your session. Reload the page and try again.');
+          setErrorMessage('Không thể kiểm tra phiên đăng nhập. Hãy thử tải lại trang.');
           setScreen('unavailable');
         }
       }
@@ -82,7 +79,7 @@ export default function App() {
 
   async function handleLogout() {
     if (!csrfToken) {
-      setErrorMessage('Could not verify sign-out. Reload the page and try again.');
+      setErrorMessage('Không thể xác minh yêu cầu đăng xuất. Hãy tải lại trang.');
       return;
     }
 
@@ -101,20 +98,20 @@ export default function App() {
   }
 
   return (
-    <div className="auth-shell" lang={language}>
+    <div className="auth-shell" lang="vi">
       <header className="auth-header">
         <a className="wordmark" href="/" aria-label="Where my bucks go? home">
           <img className="auth-brand-icon" src={brandIcon} alt="" />
           Where my bucks go?
         </a>
-        <span className="header-context">Personal finance, made clearer.</span>
+        <span className="header-context">Quản lý thu chi cá nhân, rõ ràng hơn.</span>
       </header>
 
       <main className="auth-main">
         <section className="welcome-copy" aria-labelledby="page-title">
-          <h1 id="page-title">Your personal finance assistant.</h1>
+          <h1 id="page-title">Trợ lý quản lý thu chi cá nhân của bạn.</h1>
           <p className="welcome-description">
-            Understand your spending, build better habits, and feel more confident with money.
+            Hiểu rõ chi tiêu, xây dựng thói quen tốt hơn và tự tin hơn với tiền bạc.
           </p>
         </section>
 
@@ -125,25 +122,25 @@ export default function App() {
         >
           {screen === 'checking' && (
             <div className="form-content">
-              <h2 id="form-title">{label('Kiểm tra phiên đăng nhập')}</h2>
+              <h2 id="form-title">{'Kiểm tra phiên đăng nhập'}</h2>
               <p className="form-status" role="status">
-                {label('Đang kiểm tra phiên đăng nhập…')}
+                {'Đang kiểm tra phiên đăng nhập…'}
               </p>
             </div>
           )}
 
           {screen === 'unavailable' && (
             <div className="form-content">
-              <h2 id="form-title">{label('Chưa thể đăng nhập')}</h2>
+              <h2 id="form-title">{'Chưa thể đăng nhập'}</h2>
               <p className="form-description" role="alert">
-                {label(errorMessage)}
+                {errorMessage}
               </p>
               <button
                 className="primary-button"
                 type="button"
                 onClick={() => window.location.reload()}
               >
-                {label('Thử lại')}
+                {'Thử lại'}
               </button>
             </div>
           )}
@@ -151,14 +148,14 @@ export default function App() {
           {screen === 'signed-out' && (
             <form className="login-form" onSubmit={handleLogin}>
               <div className="form-heading">
-                <h2 id="form-title">{label('Đăng nhập')}</h2>
+                <h2 id="form-title">{'Đăng nhập'}</h2>
                 <p className="form-description">
-                  {label('Dùng tài khoản đã được thiết lập cho Where my bucks go?.')}
+                  {'Dùng tài khoản đã được thiết lập cho Where my bucks go?.'}
                 </p>
               </div>
 
               <label className="field" htmlFor="username">
-                <span>{label('Tên đăng nhập')}</span>
+                <span>{'Tên đăng nhập'}</span>
                 <input
                   id="username"
                   name="username"
@@ -180,7 +177,7 @@ export default function App() {
               </label>
 
               <label className="field" htmlFor="password">
-                <span>{label('Mật khẩu')}</span>
+                <span>{'Mật khẩu'}</span>
                 <input
                   id="password"
                   name="password"
@@ -200,23 +197,23 @@ export default function App() {
               </label>
 
               <p className="form-error" id="login-error" role="alert">
-                {label(errorMessage)}
+                {errorMessage}
               </p>
 
               <button className="primary-button" type="submit" disabled={isSubmitting}>
-                {label(isSubmitting ? 'Đang đăng nhập…' : 'Đăng nhập')}
+                {isSubmitting ? 'Đang đăng nhập…' : 'Đăng nhập'}
               </button>
             </form>
           )}
 
           {screen === 'signed-in' && user && (
             <div className="form-content">
-              <h2 id="form-title">{label('Đã đăng nhập')}</h2>
+              <h2 id="form-title">{'Đã đăng nhập'}</h2>
               <p className="form-description">
-                Your session is active for <strong>{user.username}</strong>.
+                Phiên đăng nhập của bạn đang hoạt động với <strong>{user.username}</strong>.
               </p>
               <p className="form-error" role="alert" aria-live="polite">
-                {label(errorMessage)}
+                {errorMessage}
               </p>
               <button
                 className="primary-button"
@@ -224,7 +221,7 @@ export default function App() {
                 onClick={handleLogout}
                 disabled={isSubmitting}
               >
-                {label(isSubmitting ? 'Đang đăng xuất…' : 'Đăng xuất')}
+                {isSubmitting ? 'Đang đăng xuất…' : 'Đăng xuất'}
               </button>
             </div>
           )}
@@ -233,18 +230,18 @@ export default function App() {
 
       <footer className="auth-footer">
         <span>Where my bucks go?</span>
-        <span>Secure sign-in with username and password.</span>
+        <span>Đăng nhập an toàn bằng tài khoản và mật khẩu.</span>
       </footer>
     </div>
   );
 }
 
 function messageFor(error: unknown): string {
-  if (!(error instanceof ApiError)) return 'Could not connect. Check your network and try again.';
-  if (error.statusCode === 401) return 'Incorrect username or password.';
+  if (!(error instanceof ApiError)) return 'Không thể kết nối. Hãy kiểm tra mạng rồi thử lại.';
+  if (error.statusCode === 401) return 'Tên đăng nhập hoặc mật khẩu không đúng.';
   if (error.statusCode === 429) {
-    return 'Too many sign-in attempts. Wait and try again.';
+    return 'Bạn đã thử đăng nhập quá nhiều lần. Hãy chờ rồi thử lại.';
   }
-  if (error.statusCode === 503) return 'Sign-in is temporarily unavailable. Try again later.';
-  return 'Could not sign in. Try again.';
+  if (error.statusCode === 503) return 'Đăng nhập tạm thời không khả dụng. Hãy thử lại sau.';
+  return 'Không thể đăng nhập. Hãy thử lại.';
 }

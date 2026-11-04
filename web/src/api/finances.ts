@@ -182,7 +182,7 @@ export interface ChatDraftContext {
 
 export async function sendChatMessage(
   message: string,
-  language: 'en',
+  language: 'vi',
   csrfToken: string,
   history: Array<{ role: 'user' | 'assistant'; text: string }>,
   idempotencyKey: string,
@@ -431,6 +431,16 @@ export async function getTotals(
     throw invalidResponse();
   }
   return { fromDate: payload.fromDate, toDate: payload.toDate, totals: payload.totals };
+}
+
+export async function getInsight(): Promise<string | null> {
+  try {
+    const payload = await request('/api/chat/insight?language=vi');
+    if (!isRecord(payload) || typeof payload.answer !== 'string') throw invalidResponse();
+    return payload.answer;
+  } catch {
+    return null;
+  }
 }
 
 export async function getEvidence(transactionId: string): Promise<EvidenceRecord> {

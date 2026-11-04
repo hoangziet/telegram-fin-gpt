@@ -11,7 +11,6 @@ import {
   type TransactionRevision,
 } from '../api/finances';
 import './transaction-actions.css';
-import { t, useLanguage, type Language } from '../i18n';
 
 interface Props {
   transaction: TransactionRecord;
@@ -30,8 +29,6 @@ interface EditValues {
 }
 
 export default function TransactionActions({ transaction, csrfToken, onChanged, onError }: Props) {
-  const { language } = useLanguage();
-  const label = (value: string) => t(language, value);
   const [editing, setEditing] = useState(false);
   const [values, setValues] = useState<EditValues>(() => valuesFrom(transaction));
   const [proposal, setProposal] = useState<TransactionChange | null>(null);
@@ -123,7 +120,7 @@ export default function TransactionActions({ transaction, csrfToken, onChanged, 
         <div className="transaction-action-buttons">
           {transaction.isDeleted ? (
             <button type="button" className="text-button" onClick={prepareUndo} disabled={busy}>
-              {label('Hoàn tác')}
+              {'Hoàn tác'}
             </button>
           ) : (
             <>
@@ -136,7 +133,7 @@ export default function TransactionActions({ transaction, csrfToken, onChanged, 
                 }}
                 disabled={busy}
               >
-                {label('Sửa')}
+                {'Sửa'}
               </button>
               <button
                 type="button"
@@ -144,12 +141,12 @@ export default function TransactionActions({ transaction, csrfToken, onChanged, 
                 onClick={() => void prepare('deleted')}
                 disabled={busy}
               >
-                {label('Xóa')}
+                {'Xóa'}
               </button>
             </>
           )}
           <button type="button" className="text-button" onClick={showHistory} disabled={busy}>
-            {label('Lịch sử')}
+            {'Lịch sử'}
           </button>
         </div>
       )}
@@ -176,8 +173,6 @@ function EditPreviewForm(props: {
   onSubmit: () => void;
   onCancel: () => void;
 }) {
-  const { language } = useLanguage();
-  const label = (value: string) => t(language, value);
   const update = <K extends keyof EditValues>(key: K, value: EditValues[K]) =>
     props.onChange({ ...props.values, [key]: value });
   return (
@@ -189,7 +184,7 @@ function EditPreviewForm(props: {
       }}
     >
       <label className="field">
-        <span>{label('Nội dung')}</span>
+        <span>{'Nội dung'}</span>
         <input
           autoFocus
           value={props.values.description}
@@ -198,20 +193,20 @@ function EditPreviewForm(props: {
         />
       </label>
       <label className="field">
-        <span>{label('Loại')}</span>
+        <span>{'Loại'}</span>
         <select
           value={props.values.kind}
           onChange={(event) =>
             update('kind', event.currentTarget.value === 'income' ? 'income' : 'expense')
           }
         >
-          <option value="expense">{label('Tiền ra')}</option>
-          <option value="income">{label('Tiền vào')}</option>
+          <option value="expense">{'Tiền ra'}</option>
+          <option value="income">{'Tiền vào'}</option>
         </select>
       </label>
       <label className="field">
         <span>
-          {label('Số tiền')} ({props.currency})
+          {'Số tiền'} ({props.currency})
         </span>
         <input
           inputMode="decimal"
@@ -221,7 +216,7 @@ function EditPreviewForm(props: {
         />
       </label>
       <label className="field">
-        <span>{label('Ngày')}</span>
+        <span>{'Ngày'}</span>
         <input
           type="date"
           value={props.values.transactionDate}
@@ -230,19 +225,19 @@ function EditPreviewForm(props: {
         />
       </label>
       <label className="field">
-        <span>{label('Buổi')}</span>
+        <span>{'Buổi'}</span>
         <select
           value={props.values.dayPeriod}
           onChange={(event) => update('dayPeriod', event.currentTarget.value)}
         >
-          <option value="morning">{label('Sáng')}</option>
-          <option value="noon">{label('Trưa')}</option>
-          <option value="afternoon">{label('Chiều')}</option>
-          <option value="evening">{label('Tối')}</option>
+          <option value="morning">{'Sáng'}</option>
+          <option value="noon">{'Trưa'}</option>
+          <option value="afternoon">{'Chiều'}</option>
+          <option value="evening">{'Tối'}</option>
         </select>
       </label>
       <label className="field">
-        <span>{label('Giờ cụ thể (không bắt buộc)')}</span>
+        <span>{'Giờ cụ thể (không bắt buộc)'}</span>
         <input
           type="time"
           value={props.values.localTime}
@@ -251,10 +246,10 @@ function EditPreviewForm(props: {
       </label>
       <div className="transaction-form-actions">
         <button type="submit" className="primary-button" disabled={props.busy}>
-          {label('Xem trước thay đổi')}
+          {'Xem trước thay đổi'}
         </button>
         <button type="button" className="text-button" onClick={props.onCancel}>
-          {label('Bỏ qua')}
+          {'Bỏ qua'}
         </button>
       </div>
     </form>
@@ -268,8 +263,6 @@ function ProposalPreview(props: {
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const { language } = useLanguage();
-  const label = (value: string) => t(language, value);
   const actionLabel =
     props.proposal.action === 'deleted'
       ? 'xóa'
@@ -277,30 +270,27 @@ function ProposalPreview(props: {
         ? 'khôi phục'
         : 'sửa';
   const state = props.proposal.proposedState;
-  const before = transactionSummary(
-    {
-      note: props.transaction.description,
-      amount: props.transaction.amount.amount,
-      currency: props.transaction.amount.currency,
-      transactionDate: props.transaction.transactionDate,
-      dayPeriod: props.transaction.dayPeriod,
-      localTime: props.transaction.localTime,
-    },
-    language,
-  );
-  const after = transactionSummary(state, language);
+  const before = transactionSummary({
+    note: props.transaction.description,
+    amount: props.transaction.amount.amount,
+    currency: props.transaction.amount.currency,
+    transactionDate: props.transaction.transactionDate,
+    dayPeriod: props.transaction.dayPeriod,
+    localTime: props.transaction.localTime,
+  });
+  const after = transactionSummary(state);
   return (
-    <section className="change-preview" aria-label={label('Bản xem trước thay đổi')}>
+    <section className="change-preview" aria-label={'Bản xem trước thay đổi'}>
       <strong>
-        {label('Xem trước:')} {label(actionLabel)} {label('giao dịch')}
+        {'Xem trước:'} {actionLabel} {'giao dịch'}
       </strong>
       <p>
-        <strong>{label('Hiện tại:')}</strong> {before}
+        <strong>{'Hiện tại:'}</strong> {before}
       </p>
       <p>
-        <strong>{label('Sau khi xác nhận:')}</strong> {after}
+        <strong>{'Sau khi xác nhận:'}</strong> {after}
       </p>
-      {state.isDeleted && <p>{label('Giao dịch sẽ được ẩn khỏi sổ và báo cáo.')}</p>}
+      {state.isDeleted && <p>{'Giao dịch sẽ được ẩn khỏi sổ và báo cáo.'}</p>}
       <div className="transaction-form-actions">
         <button
           type="button"
@@ -308,7 +298,7 @@ function ProposalPreview(props: {
           onClick={props.onConfirm}
           disabled={props.busy}
         >
-          {label(props.busy ? 'Đang lưu…' : 'Xác nhận thay đổi')}
+          {props.busy ? 'Đang lưu…' : 'Xác nhận thay đổi'}
         </button>
         <button
           type="button"
@@ -316,7 +306,7 @@ function ProposalPreview(props: {
           onClick={props.onCancel}
           disabled={props.busy}
         >
-          {label('Hủy bản xem trước')}
+          {'Hủy bản xem trước'}
         </button>
       </div>
     </section>
@@ -324,33 +314,26 @@ function ProposalPreview(props: {
 }
 
 function RevisionHistory(props: { revisions: TransactionRevision[]; onClose: () => void }) {
-  const { language } = useLanguage();
-  const label = (value: string) => t(language, value);
   return (
-    <section className="revision-history" aria-label={label('Lịch sử giao dịch')}>
+    <section className="revision-history" aria-label={'Lịch sử giao dịch'}>
       <div className="revision-heading">
-        <h3>{label('Lịch sử thay đổi')}</h3>
+        <h3>{'Lịch sử thay đổi'}</h3>
         <button type="button" className="text-button" onClick={props.onClose}>
-          {label('Đóng')}
+          {'Đóng'}
         </button>
       </div>
       {props.revisions.map((revision) => (
         <article className="revision-entry" key={revision.id}>
           <strong>
-            {label('Phiên bản')} {revision.revisionNumber} ·{' '}
-            {label(revisionActionLabel(revision.action))}
+            {'Phiên bản'} {revision.revisionNumber} · {revisionActionLabel(revision.action)}
           </strong>
           <time dateTime={revision.createdAt}>
             {new Date(revision.createdAt).toLocaleString('en-US')}
           </time>
-          <p>
-            {revision.afterState
-              ? revisionSummary(revision.afterState, language)
-              : label('Không còn dữ liệu.')}
-          </p>
+          <p>{revision.afterState ? revisionSummary(revision.afterState) : 'Không còn dữ liệu.'}</p>
         </article>
       ))}
-      {!props.revisions.length && <p>{label('Chưa có lịch sử thay đổi.')}</p>}
+      {!props.revisions.length && <p>{'Chưa có lịch sử thay đổi.'}</p>}
     </section>
   );
 }
@@ -366,29 +349,23 @@ function valuesFrom(transaction: TransactionRecord): EditValues {
   };
 }
 
-function revisionSummary(
-  state: NonNullable<TransactionRevision['afterState']>,
-  language: Language,
-): string {
-  return `${transactionSummary(state, language)}${state.isDeleted ? ` · ${t(language, 'Đã xóa')}` : ''}`;
+function revisionSummary(state: NonNullable<TransactionRevision['afterState']>): string {
+  return `${transactionSummary(state)}${state.isDeleted ? ' · Đã xóa' : ''}`;
 }
 
-function transactionSummary(
-  state: {
-    note: string | null;
-    amount: string;
-    currency: string;
-    transactionDate: string;
-    dayPeriod: string;
-    localTime: string | null;
-  },
-  language: Language,
-): string {
+function transactionSummary(state: {
+  note: string | null;
+  amount: string;
+  currency: string;
+  transactionDate: string;
+  dayPeriod: string;
+  localTime: string | null;
+}): string {
   const summary = [
-    state.note || t(language, 'Chưa có nội dung'),
+    state.note || 'Chưa có nội dung',
     formatAmount(state.amount, state.currency),
     state.transactionDate,
-    t(language, periodLabel(state.dayPeriod)),
+    periodLabel(state.dayPeriod),
     state.localTime,
   ];
   return summary.filter(Boolean).join(' · ');

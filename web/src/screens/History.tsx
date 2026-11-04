@@ -8,7 +8,6 @@ import {
 } from '../api/finances';
 import TransactionActions from '../components/TransactionActions';
 import { FileSpreadsheetIcon, ReceiptIcon, SearchIcon } from '../components/Icons';
-import { t, useLanguage } from '../i18n';
 import { exportTransactionsCsv } from '../utils/exportTransactionsCsv';
 import { formatMoney, periodLabel } from '../utils/financeFormatters';
 import { currencyBreakdown } from '../utils/historyAnalysis';
@@ -61,8 +60,6 @@ function dateRange(
 
 export default function History(props: HistoryProps) {
   const { query, onError } = props;
-  const { language } = useLanguage();
-  const label = (value: string) => t(language, value);
   const [kind, setKind] = useState<KindFilter>('all');
   const [dateMode, setDateMode] = useState<DateFilter>('month');
   const [month, setMonth] = useState(() => currentLocalDate().slice(0, 7));
@@ -115,12 +112,12 @@ export default function History(props: HistoryProps) {
         setTotal(0);
         setSummary(null);
         setLoading(false);
-        onError(reason instanceof Error ? reason.message : t(language, 'Không thể tải giao dịch.'));
+        onError(reason instanceof Error ? reason.message : 'Không thể tải giao dịch.');
       });
     return () => {
       active = false;
     };
-  }, [query, onError, language, kind, from, to, invalidDate, showDeleted, page, revision]);
+  }, [query, onError, kind, from, to, invalidDate, showDeleted, page, revision]);
 
   function updateFilter(change: () => void) {
     setLoading(true);
@@ -151,9 +148,9 @@ export default function History(props: HistoryProps) {
     <div className="history-view">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">Transaction analysis</span>
-          <h1 className="page-title">Transaction history</h1>
-          <p className="page-subtitle">Every transaction, clearly organized.</p>
+          <span className="eyebrow">Phân tích giao dịch</span>
+          <h1 className="page-title">Lịch sử giao dịch</h1>
+          <p className="page-subtitle">Mọi giao dịch, được sắp xếp rõ ràng.</p>
         </div>
         <button
           type="button"
@@ -161,13 +158,13 @@ export default function History(props: HistoryProps) {
           onClick={downloadCsv}
           disabled={displayLoading || !displayItems.length}
         >
-          <FileSpreadsheetIcon size={16} /> {label('Xuất CSV trang đang xem')}
+          <FileSpreadsheetIcon size={16} /> {'Xuất CSV trang đang xem'}
         </button>
       </div>
 
-      <section className="bento-card history-filters" aria-label={label('Bộ lọc giao dịch')}>
+      <section className="bento-card history-filters" aria-label={'Bộ lọc giao dịch'}>
         <div className="history-filter-top">
-          <div className="history-date-options" role="group" aria-label={label('Khoảng thời gian')}>
+          <div className="history-date-options" role="group" aria-label={'Khoảng thời gian'}>
             {(['month', 'day', 'all'] as const).map((option) => (
               <button
                 key={option}
@@ -176,34 +173,32 @@ export default function History(props: HistoryProps) {
                 className={`filter-chip ${dateMode === option ? 'is-active' : ''}`}
                 onClick={() => updateFilter(() => setDateMode(option))}
               >
-                {label(
-                  option === 'month'
-                    ? 'Theo tháng'
-                    : option === 'day'
-                      ? 'Theo ngày'
-                      : 'Mọi thời gian',
-                )}
+                {option === 'month'
+                  ? 'Theo tháng'
+                  : option === 'day'
+                    ? 'Theo ngày'
+                    : 'Mọi thời gian'}
               </button>
             ))}
           </div>
           {dateMode === 'month' && (
             <label className="history-date-field">
-              {label('Chọn tháng')}
+              {'Chọn tháng'}
               <input
                 type="month"
                 value={month}
-                aria-label={label('Chọn tháng')}
+                aria-label={'Chọn tháng'}
                 onChange={(event) => updateFilter(() => setMonth(event.currentTarget.value))}
               />
             </label>
           )}
           {dateMode === 'day' && (
             <label className="history-date-field">
-              {label('Chọn ngày')}
+              {'Chọn ngày'}
               <input
                 type="date"
                 value={day}
-                aria-label={label('Chọn ngày')}
+                aria-label={'Chọn ngày'}
                 onChange={(event) => updateFilter(() => setDay(event.currentTarget.value))}
               />
             </label>
@@ -214,7 +209,7 @@ export default function History(props: HistoryProps) {
             <SearchIcon size={18} className="search-icon" />
             <input
               id="transaction-search"
-              aria-label={label('Tìm giao dịch')}
+              aria-label={'Tìm giao dịch'}
               className="search-input"
               type="search"
               maxLength={128}
@@ -222,20 +217,20 @@ export default function History(props: HistoryProps) {
               onChange={(event) =>
                 updateFilter(() => props.onQueryChange(event.currentTarget.value))
               }
-              placeholder={label('Tìm theo nội dung giao dịch...')}
+              placeholder={'Tìm theo nội dung giao dịch...'}
             />
             {props.query && (
               <button
                 type="button"
                 className="btn-clear-search"
-                aria-label={label('Xóa tìm kiếm')}
+                aria-label={'Xóa tìm kiếm'}
                 onClick={() => updateFilter(() => props.onQueryChange(''))}
               >
                 ✕
               </button>
             )}
           </div>
-          <div className="filter-chips-group" role="group" aria-label={label('Loại giao dịch')}>
+          <div className="filter-chips-group" role="group" aria-label={'Loại giao dịch'}>
             {(['all', 'income', 'expense'] as const).map((option) => (
               <button
                 key={option}
@@ -244,13 +239,7 @@ export default function History(props: HistoryProps) {
                 className={`filter-chip ${kind === option ? 'is-active' : ''}`}
                 onClick={() => updateFilter(() => setKind(option))}
               >
-                {label(
-                  option === 'all'
-                    ? 'Tất cả'
-                    : option === 'income'
-                      ? 'Tiền vào (+)'
-                      : 'Tiền ra (-)',
-                )}
+                {option === 'all' ? 'Tất cả' : option === 'income' ? 'Tiền vào (+)' : 'Tiền ra (-)'}
               </button>
             ))}
           </div>
@@ -260,20 +249,20 @@ export default function History(props: HistoryProps) {
               checked={showDeleted}
               onChange={(event) => updateFilter(() => setShowDeleted(event.currentTarget.checked))}
             />
-            {label('Hiện giao dịch đã xóa')}
+            {'Hiện giao dịch đã xóa'}
           </label>
         </div>
         {invalidDate && (
           <p className="history-filter-error" role="alert">
-            {label('Vui lòng chọn ngày hoặc tháng hợp lệ.')}
+            {'Vui lòng chọn ngày hoặc tháng hợp lệ.'}
           </p>
         )}
       </section>
 
       {range && (
-        <section className="history-analysis" aria-label={label('Tổng hợp theo đơn vị tiền')}>
+        <section className="history-analysis" aria-label={'Tổng hợp theo đơn vị tiền'}>
           <div className="history-analysis-heading">
-            <h2>{label('Dòng tiền trong kỳ')}</h2>
+            <h2>{'Dòng tiền trong kỳ'}</h2>
             <span>{range.from === range.to ? range.from : `${range.from} — ${range.to}`}</span>
           </div>
           {currencyBreakdown(summary).length ? (
@@ -283,15 +272,15 @@ export default function History(props: HistoryProps) {
                   <h3>{row.currency}</h3>
                   <dl>
                     <div>
-                      <dt>{label('Thu nhập')}</dt>
+                      <dt>{'Thu nhập'}</dt>
                       <dd className="amount-income">{row.income}</dd>
                     </div>
                     <div>
-                      <dt>{label('Chi tiêu')}</dt>
+                      <dt>{'Chi tiêu'}</dt>
                       <dd className="amount-expense">{row.expense}</dd>
                     </div>
                     <div className="history-net">
-                      <dt>{label('Dòng tiền ròng')}</dt>
+                      <dt>{'Dòng tiền ròng'}</dt>
                       <dd>{row.net}</dd>
                     </div>
                   </dl>
@@ -300,44 +289,42 @@ export default function History(props: HistoryProps) {
             </div>
           ) : (
             <p className="history-summary-empty">
-              {displayLoading
-                ? label('Đang tải tổng hợp…')
-                : label('Chưa có giao dịch đã ghi trong kỳ.')}
+              {displayLoading ? 'Đang tải tổng hợp…' : 'Chưa có giao dịch đã ghi trong kỳ.'}
             </p>
           )}
           {showDeleted && (
-            <p className="history-summary-note">
-              {label('Tổng hợp không tính các giao dịch đã xóa.')}
-            </p>
+            <p className="history-summary-note">{'Tổng hợp không tính các giao dịch đã xóa.'}</p>
           )}
         </section>
       )}
 
-      <section className="bento-card history-card" aria-label={label('Danh sách giao dịch')}>
+      <section className="bento-card history-card" aria-label={'Danh sách giao dịch'}>
         <div className="history-table-heading">
           <div>
-            <h2>{label('Chi tiết giao dịch')}</h2>
-            <p>{label('Newest first; totals include all matching results across pages.')}</p>
+            <h2>{'Chi tiết giao dịch'}</h2>
+            <p>
+              {'Mới nhất trước; tổng số tính trên toàn bộ kết quả khớp, không chỉ trang đang xem.'}
+            </p>
           </div>
           <strong aria-live="polite">
-            {displayTotal} {label('khoản phù hợp')}
+            {displayTotal} {'khoản phù hợp'}
           </strong>
         </div>
         {displayLoading ? (
           <div className="loading-container" role="status">
             <span className="spinner" />
-            <span>{label('Đang tải danh sách giao dịch…')}</span>
+            <span>{'Đang tải danh sách giao dịch…'}</span>
           </div>
         ) : displayItems.length ? (
           <div className="table-wrapper">
             <table className="modern-table transaction-history-table">
               <thead>
                 <tr>
-                  <th>{label('Khoản giao dịch')}</th>
-                  <th>{label('Ngày / buổi')}</th>
-                  <th className="numeric">{label('Số tiền')}</th>
-                  <th>{label('Chứng từ')}</th>
-                  <th>{label('Thao tác')}</th>
+                  <th>{'Khoản giao dịch'}</th>
+                  <th>{'Ngày / buổi'}</th>
+                  <th className="numeric">{'Số tiền'}</th>
+                  <th>{'Chứng từ'}</th>
+                  <th>{'Thao tác'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -345,24 +332,22 @@ export default function History(props: HistoryProps) {
                   <tr key={item.id} className={item.isDeleted ? 'row-deleted' : ''}>
                     <td>
                       <div className="item-cell">
-                        <span className="item-desc">
-                          {item.description || label('Chưa có nội dung')}
-                        </span>
+                        <span className="item-desc">{item.description || 'Chưa có nội dung'}</span>
                         <div className="tags-row">
                           <span className={`kind-tag kind-${item.kind}`}>
-                            {label(item.kind === 'income' ? 'Thu (+)' : 'Chi (-)')}
+                            {item.kind === 'income' ? 'Thu (+)' : 'Chi (-)'}
                           </span>
                           {item.category && item.category !== 'uncategorized' && (
                             <span className="category-tag">{item.category}</span>
                           )}
-                          {item.isDeleted && <span className="deleted-tag">{label('Đã xóa')}</span>}
+                          {item.isDeleted && <span className="deleted-tag">{'Đã xóa'}</span>}
                         </div>
                       </div>
                     </td>
                     <td className="history-date-cell">
                       <time dateTime={item.transactionDate}>{item.transactionDate}</time>
                       <span>
-                        {label(periodLabel(item.dayPeriod))}
+                        {periodLabel(item.dayPeriod)}
                         {item.localTime ? ` · ${item.localTime}` : ''}
                       </span>
                     </td>
@@ -375,7 +360,7 @@ export default function History(props: HistoryProps) {
                         className="btn-link"
                         onClick={() => props.onEvidence(item.id)}
                       >
-                        <ReceiptIcon size={14} /> {label('Chứng từ')}
+                        <ReceiptIcon size={14} /> {'Chứng từ'}
                       </button>
                     </td>
                     <td>
@@ -396,14 +381,14 @@ export default function History(props: HistoryProps) {
             <img src={transactionsEmpty} alt="" />
             <p>
               {props.query.trim() || kind !== 'all'
-                ? label('Không tìm thấy giao dịch phù hợp. Thử thay đổi từ khóa hoặc bộ lọc.')
+                ? 'Không tìm thấy giao dịch phù hợp. Thử thay đổi từ khóa hoặc bộ lọc.'
                 : dateMode === 'all' && !showDeleted
-                  ? label('Chưa có giao dịch nào được ghi nhận.')
-                  : label('Không có giao dịch trong khoảng thời gian đã chọn.')}
+                  ? 'Chưa có giao dịch nào được ghi nhận.'
+                  : 'Không có giao dịch trong khoảng thời gian đã chọn.'}
             </p>
           </div>
         )}
-        <nav className="history-pagination" aria-label={label('Phân trang giao dịch')}>
+        <nav className="history-pagination" aria-label={'Phân trang giao dịch'}>
           <span>
             {displayTotal
               ? `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, displayTotal)} / ${displayTotal}`
@@ -419,7 +404,7 @@ export default function History(props: HistoryProps) {
                 setPage(page - 1);
               }}
             >
-              {label('Trang trước')}
+              {'Trang trước'}
             </button>
             <button
               type="button"
@@ -430,7 +415,7 @@ export default function History(props: HistoryProps) {
                 setPage(page + 1);
               }}
             >
-              {label('Trang sau')}
+              {'Trang sau'}
             </button>
           </div>
         </nav>
@@ -439,17 +424,17 @@ export default function History(props: HistoryProps) {
       {props.evidenceLoading && (
         <div className="bento-card notice-card" role="status">
           <span className="spinner" />
-          <span>{label('Đang mở chứng từ gốc…')}</span>
+          <span>{'Đang mở chứng từ gốc…'}</span>
         </div>
       )}
       {props.evidence && (
-        <section className="bento-card evidence-drawer-card" aria-label={label('Chứng từ gốc')}>
+        <section className="bento-card evidence-drawer-card" aria-label={'Chứng từ gốc'}>
           <div className="drawer-header">
-            <h3>{label('Chứng từ gốc')}</h3>
+            <h3>{'Chứng từ gốc'}</h3>
             <button
               type="button"
               className="btn-close"
-              aria-label={label('Đóng chứng từ')}
+              aria-label={'Đóng chứng từ'}
               onClick={props.onCloseEvidence}
             >
               ✕
@@ -457,8 +442,8 @@ export default function History(props: HistoryProps) {
           </div>
           <p className="evidence-type-badge">
             {props.evidence.sourceType === 'text'
-              ? label('Tin nhắn gốc')
-              : props.evidence.originalFilename || label('Tệp đính kèm')}
+              ? 'Tin nhắn gốc'
+              : props.evidence.originalFilename || 'Tệp đính kèm'}
           </p>
           {props.evidence.sourceText && (
             <blockquote className="evidence-quote">{props.evidence.sourceText}</blockquote>
@@ -467,21 +452,21 @@ export default function History(props: HistoryProps) {
             <img
               className="evidence-drawer-img"
               src={props.evidence.contentUrl}
-              alt={label('Ảnh chứng từ gốc')}
+              alt={'Ảnh chứng từ gốc'}
             />
           )}
           {props.evidence.sourceType === 'csv' && (
             <a className="evidence-link" href={props.evidence.contentUrl} download>
-              <FileSpreadsheetIcon size={16} /> {label('Tải tệp CSV gốc')}
+              <FileSpreadsheetIcon size={16} /> {'Tải tệp CSV gốc'}
             </a>
           )}
           <div className="evidence-meta-list">
             <div>
-              <span>{label('Thời gian lưu:')}</span>
+              <span>{'Thời gian lưu:'}</span>
               <strong>{new Date(props.evidence.createdAt).toLocaleString('en-US')}</strong>
             </div>
             <div>
-              <span>{label('Dung lượng:')}</span>
+              <span>{'Dung lượng:'}</span>
               <strong>{props.evidence.byteSize.toLocaleString('en-US')} bytes</strong>
             </div>
           </div>

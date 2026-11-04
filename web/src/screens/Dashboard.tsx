@@ -2,7 +2,6 @@ import type { TotalsReport, TransactionRecord } from '../api/finances';
 import DashboardInsights from '../components/DashboardInsights';
 import { ArrowDownLeftIcon, ArrowUpRightIcon, ClockIcon, SparklesIcon } from '../components/Icons';
 import { subtractMoney, totalFor } from '../utils/financeFormatters';
-import { t, useLanguage } from '../i18n';
 
 interface DashboardProps {
   report: TotalsReport | null;
@@ -10,59 +9,71 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ report, transactions }: DashboardProps) {
-  const { language } = useLanguage();
-  const label = (value: string) => t(language, value);
   const income = totalFor(report, 'income');
   const expense = totalFor(report, 'expense');
+  const isEmpty = report !== null && report.totals.length === 0 && transactions.length === 0;
 
   return (
     <div className="dashboard-view">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">Personal finance</span>
-          <h1 className="page-title">Financial overview</h1>
-          <p className="page-subtitle">Your money, at a glance.</p>
+          <span className="eyebrow">Thu chi cá nhân</span>
+          <h1 className="page-title">Tổng quan tài chính</h1>
+          <p className="page-subtitle">Tiền của bạn, nhìn một lần là rõ.</p>
         </div>
         <div className="range-badge">
           <ClockIcon size={14} />
-          <span>{report ? `${report.fromDate} — ${report.toDate}` : label('Tháng này')}</span>
+          <span>{report ? `${report.fromDate} — ${report.toDate}` : 'Tháng này'}</span>
         </div>
       </div>
-      <section className="bento-kpi-grid" aria-label={'Monthly cash flow overview'}>
-        <div className="bento-kpi-card kpi-income">
-          <div className="kpi-header">
-            <span className="kpi-label">{label('Tổng thu nhập')}</span>
-            <span className="kpi-icon-badge income-badge">
-              <ArrowDownLeftIcon size={18} />
-            </span>
-          </div>
-          <p className="kpi-value tabular-nums">{income}</p>
-          <span className="kpi-subtext">{label('Đã ghi nhận trong tháng')}</span>
+      {isEmpty ? (
+        <div className="bento-card dashboard-empty-state">
+          <SparklesIcon size={28} />
+          <h2 className="card-title">Chưa có giao dịch nào</h2>
+          <p>Ghi lại khoản chi hoặc thu nhập đầu tiên để xem tổng quan tài chính ở đây.</p>
+          <a className="btn-primary" href="/?view=chat">
+            Ghi giao dịch đầu tiên
+          </a>
         </div>
-        <div className="bento-kpi-card kpi-expense">
-          <div className="kpi-header">
-            <span className="kpi-label">{label('Tổng chi tiêu')}</span>
-            <span className="kpi-icon-badge expense-badge">
-              <ArrowUpRightIcon size={18} />
-            </span>
-          </div>
-          <p className="kpi-value tabular-nums">{expense}</p>
-          <span className="kpi-subtext">{label('Đã ghi nhận trong tháng')}</span>
-        </div>
-        <div className="bento-kpi-card kpi-net">
-          <div className="kpi-header">
-            <span className="kpi-label">{label('Dòng tiền ròng')}</span>
-            <span className="kpi-icon-badge net-badge">
-              <SparklesIcon size={18} />
-            </span>
-          </div>
-          <p className="kpi-value tabular-nums">{subtractMoney(income, expense)}</p>
-          <span className="kpi-subtext">
-            {label('Chênh lệch thu - chi · không phải số dư ngân hàng')}
-          </span>
-        </div>
-      </section>
-      <DashboardInsights report={report} transactions={transactions} />
+      ) : (
+        <>
+          <section className="bento-kpi-grid" aria-label={'Tổng quan dòng tiền trong tháng'}>
+            <div className="bento-kpi-card kpi-income">
+              <div className="kpi-header">
+                <span className="kpi-label">{'Tổng thu nhập'}</span>
+                <span className="kpi-icon-badge income-badge">
+                  <ArrowDownLeftIcon size={18} />
+                </span>
+              </div>
+              <p className="kpi-value tabular-nums">{income}</p>
+              <span className="kpi-subtext">{'Đã ghi nhận trong tháng'}</span>
+            </div>
+            <div className="bento-kpi-card kpi-expense">
+              <div className="kpi-header">
+                <span className="kpi-label">{'Tổng chi tiêu'}</span>
+                <span className="kpi-icon-badge expense-badge">
+                  <ArrowUpRightIcon size={18} />
+                </span>
+              </div>
+              <p className="kpi-value tabular-nums">{expense}</p>
+              <span className="kpi-subtext">{'Đã ghi nhận trong tháng'}</span>
+            </div>
+            <div className="bento-kpi-card kpi-net">
+              <div className="kpi-header">
+                <span className="kpi-label">{'Dòng tiền ròng'}</span>
+                <span className="kpi-icon-badge net-badge">
+                  <SparklesIcon size={18} />
+                </span>
+              </div>
+              <p className="kpi-value tabular-nums">{subtractMoney(income, expense)}</p>
+              <span className="kpi-subtext">
+                {'Chênh lệch thu - chi · không phải số dư ngân hàng'}
+              </span>
+            </div>
+          </section>
+          <DashboardInsights report={report} transactions={transactions} />
+        </>
+      )}
     </div>
   );
 }

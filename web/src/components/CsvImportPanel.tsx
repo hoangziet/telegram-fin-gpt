@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { ApiError } from '../api/client';
 import { uploadCsv, type DraftPreview } from '../api/finances';
-import { t, useLanguage } from '../i18n';
 
 const FIELD_OPTIONS = [
   {
@@ -39,8 +38,6 @@ export default function CsvImportPanel({
   onPreview,
   onError,
 }: Props) {
-  const { language } = useLanguage();
-  const label = (value: string) => t(language, value);
   const [file, setFile] = useState<File | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
@@ -58,7 +55,7 @@ export default function CsvImportPanel({
     onError('');
     if (!nextFile) return;
     if (nextFile.size > 5 * 1024 * 1024) {
-      onError(label('Tệp CSV phải nhỏ hơn hoặc bằng 5 MiB.'));
+      onError('Tệp CSV phải nhỏ hơn hoặc bằng 5 MiB.');
       return;
     }
     try {
@@ -67,7 +64,7 @@ export default function CsvImportPanel({
       setHeaders(parsedHeaders);
       setMapping(guessMapping(parsedHeaders));
     } catch {
-      onError(label('Không đọc được hàng tiêu đề CSV. Hãy kiểm tra định dạng UTF-8.'));
+      onError('Không đọc được hàng tiêu đề CSV. Hãy kiểm tra định dạng UTF-8.');
     }
   }
 
@@ -81,9 +78,9 @@ export default function CsvImportPanel({
     } catch (reason) {
       if (reason instanceof ApiError && reason.statusCode === 409 && !allowDuplicate) {
         setDuplicateDetected(true);
-        onError(label('Tệp CSV đã tồn tại. Mở bản nháp cũ hoặc xác nhận nhập lại.'));
+        onError('Tệp CSV đã tồn tại. Mở bản nháp cũ hoặc xác nhận nhập lại.');
       } else {
-        onError(reason instanceof Error ? reason.message : label('Không thể nhập tệp CSV.'));
+        onError(reason instanceof Error ? reason.message : 'Không thể nhập tệp CSV.');
       }
     } finally {
       onBusyChange(false);
@@ -94,15 +91,13 @@ export default function CsvImportPanel({
     <section className="panel csv-import-panel" aria-labelledby="csv-import-title">
       <div className="panel-heading">
         <div>
-          <h2 id="csv-import-title">{label('Nhập từ bảng tính')}</h2>
-          <p className="panel-description">
-            {label('Chọn cột để xem trước từng dòng trước khi ghi sổ.')}
-          </p>
+          <h2 id="csv-import-title">{'Nhập từ bảng tính'}</h2>
+          <p className="panel-description">{'Chọn cột để xem trước từng dòng trước khi ghi sổ.'}</p>
         </div>
       </div>
       <form className="csv-import-form" onSubmit={(event) => void submit(event)}>
         <label className="field" htmlFor="csv-file">
-          <span>{label('Tệp CSV (tối đa 5 MiB)')}</span>
+          <span>{'Tệp CSV (tối đa 5 MiB)'}</span>
           <input
             id="csv-file"
             type="file"
@@ -115,7 +110,7 @@ export default function CsvImportPanel({
             {FIELD_OPTIONS.map((field) => (
               <label className="field" key={field.key}>
                 <span>
-                  {label(field.label)}
+                  {field.label}
                   {'required' in field && field.required ? ' *' : ''}
                 </span>
                 <select
@@ -134,7 +129,7 @@ export default function CsvImportPanel({
                     setIdempotencyKey(crypto.randomUUID());
                   }}
                 >
-                  <option value="">{label('Không dùng cột này')}</option>
+                  <option value="">{'Không dùng cột này'}</option>
                   {headers.map((header) => (
                     <option value={header} key={`${field.key}:${header}`}>
                       {header}
@@ -155,14 +150,14 @@ export default function CsvImportPanel({
                 setIdempotencyKey(crypto.randomUUID());
               }}
             />
-            <span>{label('Tôi chủ động muốn nhập lại tệp này thành một bản nháp riêng.')}</span>
+            <span>{'Tôi chủ động muốn nhập lại tệp này thành một bản nháp riêng.'}</span>
           </label>
         )}
         <div className="entry-actions">
           <p>
             {file
               ? `${file.name} · ${file.size.toLocaleString('en-US')} bytes`
-              : label('Chỉ nhận tệp CSV UTF-8.')}
+              : 'Chỉ nhận tệp CSV UTF-8.'}
           </p>
           <button
             className="primary-button"
@@ -175,7 +170,7 @@ export default function CsvImportPanel({
               (duplicateDetected && !allowDuplicate)
             }
           >
-            {label(busy ? 'Đang đọc tệp…' : 'Tạo bản xem trước')}
+            {busy ? 'Đang đọc tệp…' : 'Tạo bản xem trước'}
           </button>
         </div>
       </form>

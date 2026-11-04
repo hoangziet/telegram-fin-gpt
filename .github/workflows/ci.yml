@@ -90,7 +90,7 @@ jobs:
             sleep 2
           done
           curl --fail --silent --show-error http://127.0.0.1:8080/health/live >/dev/null
-          curl --fail --silent --show-error http://127.0.0.1:8080/ | grep -q '<title>Where my bucks go?</title>'
+          curl --fail --silent --show-error http://127.0.0.1:8080/ | grep -q '<title>FinGPT</title>'
 
   web:
     runs-on: ubuntu-latest

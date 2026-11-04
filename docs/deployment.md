@@ -50,12 +50,6 @@ owner-approved assignments and scopes documented in the root `RBAC.md`.
 ## Current dev test deployment
 
 - Static Web App: `https://ambitious-beach-0f2a4c700.8.azurestaticapps.net`
-- A successful `CI` run on `main` triggers `.github/workflows/web-deploy.yml`.
-  It builds the checked CI commit and deploys only `web/dist` to the existing dev
-  Static Web App. Configure repository secret `FINGPT_DEV_SWA_DEPLOYMENT_TOKEN`
-  from the `wmbg-dev-swa` deployment token; never print or commit it. The
-  workflow verifies the web shell after deployment. Backend/infra are not
-  deployed by this workflow; they remain governed by the manual runtime phases.
 - API and PostgreSQL: Southeast Asia; Static Web App: East Asia.
 - The `owner` login is bootstrapped. Its generated password is held in Key Vault
   as `mvp-owner-password`; retrieve it as an authorized member of `QAI-Demo`:

@@ -7,9 +7,10 @@ import {
   csvErrorLabel,
 } from '../utils/financeFormatters';
 import { CheckCircleIcon, AlertCircleIcon, CalendarIcon, ClockIcon } from './Icons';
-import { t, useLanguage } from '../i18n';
 
 export interface DraftEditInputs {
+  transactionDate?: string;
+  dayPeriod?: string;
   description?: string;
   amount?: string;
   currency?: string;
@@ -44,8 +45,6 @@ interface DraftItemViewProps {
 const COMMON_CATEGORIES = ['Ăn uống', 'Di chuyển', 'Mua sắm', 'Hóa đơn', 'Lương', 'Giải trí'];
 
 export default function DraftItemView(props: DraftItemViewProps) {
-  const { language } = useLanguage();
-  const label = (value: string) => t(language, value);
   const item = props.item;
   const hasUnsavedChanges =
     props.descriptionValue !== (item.description ?? '') ||
@@ -70,18 +69,18 @@ export default function DraftItemView(props: DraftItemViewProps) {
               : `D${item.rowNumber}`}
           </span>
           <div className="item-headings">
-            <h3 className="item-title">{item.description || label('Chưa có nội dung')}</h3>
+            <h3 className="item-title">{item.description || 'Chưa có nội dung'}</h3>
             <p className="item-meta">
               <span className="meta-amount">{formatMoney(item.amount)}</span>
               <span className="meta-sep">•</span>
               <span className="meta-date">
                 <CalendarIcon size={14} className="inline-icon" />
-                {item.transactionDate ?? label('Thiếu ngày')}
+                {item.transactionDate ?? 'Thiếu ngày'}
               </span>
               <span className="meta-sep">•</span>
               <span className="meta-period">
                 <ClockIcon size={14} className="inline-icon" />
-                {label(periodLabel(item.dayPeriod))}
+                {periodLabel(item.dayPeriod)}
               </span>
             </p>
           </div>
@@ -94,7 +93,7 @@ export default function DraftItemView(props: DraftItemViewProps) {
           ) : (
             <AlertCircleIcon size={14} />
           )}
-          <span>{label(statusLabel(item.status))}</span>
+          <span>{statusLabel(item.status)}</span>
         </div>
       </div>
 
@@ -102,32 +101,32 @@ export default function DraftItemView(props: DraftItemViewProps) {
         <div className="draft-item-body">
           <div className="draft-fields-grid">
             <label className="field-group" htmlFor={`desc-${item.id}`}>
-              <span className="field-label">{label('Nội dung giao dịch')}</span>
+              <span className="field-label">{'Nội dung giao dịch'}</span>
               <input
                 id={`desc-${item.id}`}
                 className="text-input"
                 value={props.descriptionValue}
                 onChange={(e) => props.onDescriptionChange(e.currentTarget.value)}
                 maxLength={256}
-                placeholder="Transaction description"
+                placeholder="Nội dung giao dịch"
               />
             </label>
 
             <label className="field-group" htmlFor={`kind-${item.id}`}>
-              <span className="field-label">{label('Loại thu / chi')}</span>
+              <span className="field-label">{'Loại thu / chi'}</span>
               <select
                 id={`kind-${item.id}`}
                 className="select-input"
                 value={props.kindValue}
                 onChange={(e) => props.onKindChange(e.currentTarget.value as DraftItem['kind'])}
               >
-                <option value="expense">{label('Chi tiêu (-)')}</option>
-                <option value="income">{label('Thu nhập (+)')}</option>
+                <option value="expense">{'Chi tiêu (-)'}</option>
+                <option value="income">{'Thu nhập (+)'}</option>
               </select>
             </label>
 
             <label className="field-group" htmlFor={`amount-${item.id}`}>
-              <span className="field-label">{label('Số tiền')}</span>
+              <span className="field-label">{'Số tiền'}</span>
               <div className="input-with-affix">
                 <input
                   id={`amount-${item.id}`}
@@ -142,14 +141,14 @@ export default function DraftItemView(props: DraftItemViewProps) {
             </label>
 
             <label className="field-group" htmlFor={`currency-${item.id}`}>
-              <span className="field-label">{label('Tiền tệ')}</span>
+              <span className="field-label">{'Tiền tệ'}</span>
               <select
                 id={`currency-${item.id}`}
                 className="select-input"
                 value={props.currencyValue}
                 onChange={(e) => props.onCurrencyChange(e.currentTarget.value)}
               >
-                <option value="">{label('Chọn tiền tệ')}</option>
+                <option value="">{'Chọn tiền tệ'}</option>
                 {['VND', 'USD', 'EUR', 'JPY', 'BHD', 'KWD'].map((code) => (
                   <option value={code} key={code}>
                     {code}
@@ -159,7 +158,7 @@ export default function DraftItemView(props: DraftItemViewProps) {
             </label>
 
             <label className="field-group" htmlFor={`date-${item.id}`}>
-              <span className="field-label">{label('Ngày giao dịch')}</span>
+              <span className="field-label">{'Ngày giao dịch'}</span>
               <input
                 id={`date-${item.id}`}
                 className="date-input"
@@ -170,23 +169,23 @@ export default function DraftItemView(props: DraftItemViewProps) {
             </label>
 
             <label className="field-group" htmlFor={`period-${item.id}`}>
-              <span className="field-label">{label('Buổi')}</span>
+              <span className="field-label">{'Buổi'}</span>
               <select
                 id={`period-${item.id}`}
                 className="select-input"
                 value={props.periodValue}
                 onChange={(e) => props.onPeriodChange(e.currentTarget.value)}
               >
-                <option value="">{label('Chọn buổi')}</option>
-                <option value="morning">{label('Sáng')}</option>
-                <option value="noon">{label('Trưa')}</option>
-                <option value="afternoon">{label('Chiều')}</option>
-                <option value="evening">{label('Tối')}</option>
+                <option value="">{'Chọn buổi'}</option>
+                <option value="morning">{'Sáng'}</option>
+                <option value="noon">{'Trưa'}</option>
+                <option value="afternoon">{'Chiều'}</option>
+                <option value="evening">{'Tối'}</option>
               </select>
             </label>
 
             <label className="field-group" htmlFor={`time-${item.id}`}>
-              <span className="field-label">{label('Giờ cụ thể')}</span>
+              <span className="field-label">{'Giờ cụ thể'}</span>
               <input
                 id={`time-${item.id}`}
                 className="time-input"
@@ -198,7 +197,7 @@ export default function DraftItemView(props: DraftItemViewProps) {
 
             <div className="field-group">
               <label className="field-label" htmlFor={`cat-${item.id}`}>
-                {label('Danh mục')}
+                {'Danh mục'}
               </label>
               <input
                 id={`cat-${item.id}`}
@@ -206,9 +205,9 @@ export default function DraftItemView(props: DraftItemViewProps) {
                 value={props.categoryValue}
                 onChange={(e) => props.onCategoryChange(e.currentTarget.value)}
                 maxLength={128}
-                placeholder="uncategorized"
+                placeholder="chưa phân loại"
               />
-              <div className="quick-tags" aria-label={label('Gợi ý danh mục')}>
+              <div className="quick-tags" aria-label={'Gợi ý danh mục'}>
                 {COMMON_CATEGORIES.map((cat) => (
                   <button
                     key={cat}
@@ -216,7 +215,7 @@ export default function DraftItemView(props: DraftItemViewProps) {
                     className="quick-tag-chip"
                     onClick={() => props.onCategoryChange(cat)}
                   >
-                    {label(cat)}
+                    {cat}
                   </button>
                 ))}
               </div>
@@ -227,16 +226,16 @@ export default function DraftItemView(props: DraftItemViewProps) {
             <p className="missing-alert" role="alert">
               <AlertCircleIcon size={16} />
               <span>
-                {label('Cần bổ sung thông tin:')}{' '}
-                {item.missingFields.map((field) => label(missingFieldLabel(field))).join(', ')}.
+                {'Cần bổ sung thông tin:'}{' '}
+                {item.missingFields.map((field) => missingFieldLabel(field)).join(', ')}.
               </span>
             </p>
           )}
 
           {Object.keys(item.rowErrors).length > 0 && (
-            <ul className="csv-row-errors" aria-label={label('Lỗi của dòng nhập')}>
+            <ul className="csv-row-errors" aria-label={'Lỗi của dòng nhập'}>
               {Object.entries(item.rowErrors).map(([field, code]) => (
-                <li key={field}>{label(csvErrorLabel(field, code))}</li>
+                <li key={field}>{csvErrorLabel(field, code)}</li>
               ))}
             </ul>
           )}
@@ -248,7 +247,7 @@ export default function DraftItemView(props: DraftItemViewProps) {
               onClick={props.onSave}
               disabled={props.busy || !hasUnsavedChanges}
             >
-              {label(hasUnsavedChanges ? 'Lưu thay đổi đã sửa' : 'Đã lưu bản xem trước')}
+              {hasUnsavedChanges ? 'Lưu thay đổi đã sửa' : 'Đã lưu bản xem trước'}
             </button>
 
             {isReady && (
@@ -258,7 +257,7 @@ export default function DraftItemView(props: DraftItemViewProps) {
                 disabled={props.busy || hasUnsavedChanges}
                 onClick={props.onConfirm}
               >
-                {label(props.busy ? 'Đang ghi sổ…' : 'Xác nhận ghi khoản này')}
+                {props.busy ? 'Đang ghi sổ…' : 'Xác nhận ghi khoản này'}
               </button>
             )}
           </div>
@@ -268,7 +267,7 @@ export default function DraftItemView(props: DraftItemViewProps) {
       {isConfirmed && (
         <div className="confirmed-banner">
           <CheckCircleIcon size={18} />
-          <span>{label('Khoản này đã được xác nhận và ghi vào sổ giao dịch của bạn.')}</span>
+          <span>{'Khoản này đã được xác nhận và ghi vào sổ giao dịch của bạn.'}</span>
         </div>
       )}
     </article>

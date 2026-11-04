@@ -98,7 +98,7 @@ class FoundryChat:
 def _send_request(request: Request) -> bytes:
     """Read a bounded HTTPS response without logging sensitive payloads."""
     with urlopen(request, timeout=30) as response:
-        data = response.read(32_769)
+        data = bytes(response.read(32_769))
         if len(data) > 32_768:
             raise ChatInferenceError("Chat returned an oversized response.")
         return data
