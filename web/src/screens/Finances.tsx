@@ -1,3 +1,4 @@
+import { ApiError, changePassword } from '../api/client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   confirmDraftItem,
@@ -67,9 +68,11 @@ export default function Finances({
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [itemEdits, setItemEdits] = useState<Record<string, DraftEditInputs>>({});
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [passwordUpdated, setPasswordUpdated] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const accountTriggerRef = useRef<HTMLButtonElement>(null);
-  const signOutRef = useRef<HTMLButtonElement>(null);
+  const passwordMenuRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -88,7 +91,7 @@ export default function Finances({
 
     document.addEventListener('pointerdown', closeOnOutsidePointer);
     document.addEventListener('keydown', closeOnEscape);
-    signOutRef.current?.focus();
+    passwordMenuRef.current?.focus();
     return () => {
       document.removeEventListener('pointerdown', closeOnOutsidePointer);
       document.removeEventListener('keydown', closeOnEscape);
@@ -329,7 +332,19 @@ export default function Finances({
           {accountMenuOpen && (
             <div className="account-menu" id="account-menu" role="menu" aria-label="Tài khoản">
               <button
-                ref={signOutRef}
+                ref={passwordMenuRef}
+                className="account-menu-item"
+                role="menuitem"
+                type="button"
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  setPasswordUpdated(false);
+                  setPasswordOpen(true);
+                }}
+              >
+                Đổi mật khẩu
+              </button>
+              <button
                 className="account-menu-item"
                 role="menuitem"
                 type="button"
@@ -349,6 +364,7 @@ export default function Finances({
 
       {/* Main Content Area */}
       <main className="product-main">
+        {passwordUpdated && <p role="status">Đã cập nhật mật khẩu.</p>}
         {errorMessage && (
           <div className="system-alert alert-error" role="alert">
             <AlertCircleIcon size={18} />
@@ -438,6 +454,22 @@ export default function Finances({
         </div>
       </main>
 
+      <footer className="finance-footer">
+        <span>© 2026 Where my bucks go?</span>
+        <span>Dữ liệu của bạn được lưu riêng tư.</span>
+      </footer>
+
+      {passwordOpen && (
+        <PasswordDialog
+          csrfToken={csrfToken}
+          onClose={(updated) => {
+            setPasswordOpen(false);
+            if (updated) setPasswordUpdated(true);
+            accountTriggerRef.current?.focus();
+          }}
+        />
+      )}
+
       {/* Mobile Bottom Navigation Bar */}
       <nav className="mobile-bottom-nav" aria-label="Điều hướng trên di động">
         <button
@@ -469,5 +501,120 @@ export default function Finances({
         </button>
       </nav>
     </div>
+  );
+}
+
+function passwordError(reason: unknown): string {
+  if (!(reason instanceof ApiError) || reason.code === 'service_unavailable') {
+    return 'Không thể kết nối. Hãy thử lại.';
+  }
+  if (reason.code === 'invalid_current_password') return 'Mật khẩu hiện tại không đúng.';
+  if (reason.code === 'invalid_new_password') {
+    return reason.message === 'Yêu cầu không thể hoàn tất.' || !reason.message
+      ? 'Mật khẩu mới phải có từ 15 đến 128 ký tự và khác mật khẩu hiện tại.'
+      : reason.message;
+  }
+  return 'Không thể cập nhật mật khẩu. Hãy thử lại.';
+}
+
+function PasswordDialog({
+  csrfToken,
+  onClose,
+}: {
+  csrfToken: string;
+  onClose: (updated: boolean) => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const submittingRef = useRef(false);
+  const activeRef = useRef(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    activeRef.current = true;
+    dialogRef.current?.showModal();
+    return () => {
+      activeRef.current = false;
+    };
+  }, []);
+
+  function close(updated: boolean) {
+    dialogRef.current?.close();
+    onClose(updated);
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submittingRef.current) return;
+    const data = new FormData(event.currentTarget);
+    const current = String(data.get('currentPassword') ?? '');
+    const next = String(data.get('newPassword') ?? '');
+    if (next !== data.get('confirmPassword')) {
+      setError('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+    submittingRef.current = true;
+    setSubmitting(true);
+    setError('');
+    try {
+      await changePassword(current, next, csrfToken);
+      if (activeRef.current) close(true);
+    } catch (reason: unknown) {
+      if (activeRef.current) setError(passwordError(reason));
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="password-dialog"
+      aria-modal="true"
+      aria-labelledby="password-heading"
+      onCancel={(event) => {
+        event.preventDefault();
+        close(false);
+      }}
+    >
+      <div className="drawer-header">
+        <h2 id="password-heading">Đổi mật khẩu</h2>
+        <button type="button" className="btn-secondary" onClick={() => close(false)}>
+          Đóng
+        </button>
+      </div>
+      <form onSubmit={(event) => void submit(event)} aria-busy={submitting}>
+        <label>
+          Mật khẩu hiện tại
+          <input name="currentPassword" type="password" autoComplete="current-password" required />
+        </label>
+        <label>
+          Mật khẩu mới
+          <input
+            name="newPassword"
+            type="password"
+            autoComplete="new-password"
+            minLength={15}
+            maxLength={128}
+            required
+            aria-describedby="password-policy"
+          />
+        </label>
+        <p id="password-policy">Từ 15 đến 128 ký tự, khác mật khẩu hiện tại.</p>
+        <label>
+          Xác nhận mật khẩu mới
+          <input name="confirmPassword" type="password" autoComplete="new-password" required />
+        </label>
+        {error && (
+          <p className="password-error" role="alert">
+            {error}
+          </p>
+        )}
+        <button className="btn-primary" type="submit" disabled={submitting}>
+          {submitting ? 'Đang cập nhật…' : 'Cập nhật mật khẩu'}
+        </button>
+      </form>
+    </dialog>
   );
 }

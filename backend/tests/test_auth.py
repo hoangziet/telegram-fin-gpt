@@ -9,6 +9,7 @@ from argon2 import PasswordHasher
 from flask import Flask
 from flask.testing import FlaskClient
 from sqlalchemy import create_engine, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -202,3 +203,115 @@ def test_malformed_non_ascii_session_cookie_is_rejected_without_server_error(cli
     response = client.get("/api/auth/me")
 
     assert response.status_code == 401
+
+
+@pytest.fixture
+def password_headers(client: FlaskClient, app: Flask) -> dict[str, str]:
+    app.test_cli_runner().invoke(
+        args=["bootstrap-owner", "owner"],
+        input="Strong test password! 2026\nStrong test password! 2026\n",
+    )
+    response = client.post("/api/auth/login", json={"username": "owner", "password": "Strong test password! 2026"})
+    assert response.status_code == 200
+    assert response.json is not None
+    return {"X-CSRF-Token": response.json["csrfToken"]}
+
+
+def test_change_password_requires_authentication(client: FlaskClient) -> None:
+    assert client.post("/api/auth/password").status_code == 401
+
+
+def test_change_password_requires_csrf(client: FlaskClient, password_headers: dict[str, str]) -> None:
+    assert client.post("/api/auth/password").status_code == 403
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        None,
+        [],
+        {},
+        {"currentPassword": "password"},
+        {"newPassword": "password"},
+        {"currentPassword": 123, "newPassword": "password"},
+        {"currentPassword": "password", "newPassword": 123},
+    ],
+)
+def test_change_password_rejects_invalid_body(
+    client: FlaskClient, password_headers: dict[str, str], body: object
+) -> None:
+    response = client.post("/api/auth/password", json=body, headers=password_headers)
+    assert response.status_code == 400
+    assert response.json is not None
+    assert response.json["error"]["code"] == "invalid_request"
+
+
+def test_change_password_rejects_wrong_current_password(client: FlaskClient, password_headers: dict[str, str]) -> None:
+    response = client.post(
+        "/api/auth/password",
+        headers=password_headers,
+        json={"currentPassword": "wrong password", "newPassword": "Another strong password! 2026"},
+    )
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"]["code"] == "invalid_current_password"
+
+
+@pytest.mark.parametrize("new_password", ["short", "x" * 129, "Strong test password! 2026"])
+def test_change_password_rejects_invalid_new_password(
+    client: FlaskClient, password_headers: dict[str, str], new_password: str
+) -> None:
+    response = client.post(
+        "/api/auth/password",
+        headers=password_headers,
+        json={"currentPassword": "Strong test password! 2026", "newPassword": new_password},
+    )
+    assert response.status_code == 422
+    assert response.json is not None
+    assert response.json["error"]["code"] == "invalid_new_password"
+
+
+def test_change_password_updates_login_credentials(client: FlaskClient, password_headers: dict[str, str]) -> None:
+    response = client.post(
+        "/api/auth/password",
+        headers=password_headers,
+        json={"currentPassword": "Strong test password! 2026", "newPassword": "Another strong password! 2026"},
+    )
+    assert response.status_code == 200
+    assert response.json == {"status": "updated"}
+    assert (
+        client.post(
+            "/api/auth/login", json={"username": "owner", "password": "Strong test password! 2026"}
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/auth/login", json={"username": "owner", "password": "Another strong password! 2026"}
+        ).status_code
+        == 200
+    )
+
+
+def test_change_password_rolls_back_database_failure(
+    client: FlaskClient, password_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with monkeypatch.context() as patch:
+
+        def fail_commit(database: Session) -> None:
+            raise SQLAlchemyError("private database details")
+
+        patch.setattr(Session, "commit", fail_commit)
+        response = client.post(
+            "/api/auth/password",
+            headers=password_headers,
+            json={"currentPassword": "Strong test password! 2026", "newPassword": "Another strong password! 2026"},
+        )
+    assert response.status_code == 503
+    assert response.json == {"error": {"code": "service_unavailable", "message": "Service is unavailable."}}
+    assert (
+        client.post(
+            "/api/auth/login", json={"username": "owner", "password": "Strong test password! 2026"}
+        ).status_code
+        == 200
+    )

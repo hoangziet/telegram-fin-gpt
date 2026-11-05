@@ -163,6 +163,38 @@ def current_identity() -> Any:
     return jsonify(user=public_user(g.auth_user))
 
 
+@AUTH_BLUEPRINT.post("/password")
+def change_password() -> tuple[Any, int]:
+    """Verify the current password and update the authenticated owner's password."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return _error("invalid_request", "Send currentPassword and newPassword as strings."), 400
+    current_password = body.get("currentPassword")
+    new_password = body.get("newPassword")
+    if not isinstance(current_password, str) or not isinstance(new_password, str):
+        return _error("invalid_request", "Send currentPassword and newPassword as strings."), 400
+
+    hasher: PasswordHasher = current_app.extensions["password_hasher"]
+    user: User = g.auth_user
+    if len(current_password) > 1024 or not verify_password(hasher, user.password_hash, current_password):
+        return _error("invalid_current_password", "Current password is incorrect."), 401
+    reason = validate_password(new_password)
+    if reason is not None:
+        return _error("invalid_new_password", reason), 422
+    if new_password == current_password:
+        return _error("invalid_new_password", "New password must differ from the current password."), 422
+
+    database: Session = g.database_session
+    try:
+        user.password_hash = hasher.hash(new_password)
+        database.commit()
+    except SQLAlchemyError:
+        database.rollback()
+        current_app.logger.warning("Password update failed because the authentication store is unavailable")
+        return _error("service_unavailable", "Service is unavailable."), 503
+    return jsonify(status="updated"), 200
+
+
 @AUTH_BLUEPRINT.get("/csrf")
 def csrf_token() -> Any:
     """Return the CSRF token associated with the authenticated session."""
@@ -198,3 +230,8 @@ def _database_session() -> Session:
         database = Session(engine, expire_on_commit=False)
         g.database_session = database
     return database
+
+
+def _error(code: str, message: str) -> Any:
+    """Return a bounded, user-safe error without logging private content."""
+    return jsonify(error={"code": code, "message": message})

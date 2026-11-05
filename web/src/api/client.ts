@@ -13,11 +13,13 @@ export interface LoginResult {
 
 export class ApiError extends Error {
   readonly statusCode: number;
+  readonly code: string | undefined;
 
-  constructor(message: string, statusCode: number) {
+  constructor(message: string, statusCode: number, code?: string) {
     super(message);
     this.name = 'ApiError';
     this.statusCode = statusCode;
+    this.code = code;
   }
 }
 
@@ -75,6 +77,21 @@ export async function logout(csrfToken: string): Promise<void> {
   if (!response.ok) throw await toApiError(response);
 }
 
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+  csrfToken: string,
+): Promise<void> {
+  const payload = await requestJson('/api/auth/password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  if (!isRecord(payload) || payload.status !== 'updated') {
+    throw new ApiError('Máy chủ trả về dữ liệu không hợp lệ.', 502);
+  }
+}
+
 async function requestJson(path: string, init: RequestInit = {}): Promise<unknown> {
   const response = await fetch(path, {
     ...init,
@@ -97,7 +114,11 @@ function toApiErrorFromPayload(statusCode: number, payload: unknown): ApiError {
     isRecord(payload) && isRecord(payload.error) && typeof payload.error.message === 'string'
       ? payload.error.message
       : 'Yêu cầu không thể hoàn tất.';
-  return new ApiError(message, statusCode);
+  const code =
+    isRecord(payload) && isRecord(payload.error) && typeof payload.error.code === 'string'
+      ? payload.error.code
+      : undefined;
+  return new ApiError(message, statusCode, code);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
