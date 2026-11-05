@@ -46,6 +46,20 @@ PostgreSQL transaction advisory lock. It is not exposed as an HTTP endpoint.
   queries must receive `g.auth_user.id`, and database composite ownership keys
   are a second layer of defense.
 
+## Changing the owner password
+
+`POST /api/auth/password` requires an authenticated session and `X-CSRF-Token`.
+Send JSON with string fields `currentPassword` and `newPassword`. Missing or
+non-string fields return 400; an incorrect current password returns 401
+(`invalid_current_password`). The new password must differ from the current
+password and meet the bootstrap policy: 15–128 characters and at most 1,024
+UTF-8 bytes. Policy failures return 422 (`invalid_new_password`). Passwords are
+not trimmed or normalized, and the username cannot be edited.
+
+Success returns 200 with `{"status": "updated"}` after saving the configured
+Argon2id hash. Existing sessions remain valid. Database failures roll back the
+update and return 503 (`service_unavailable`) without private details.
+
 ## Threat cases exercised
 
 - Repeated first-owner bootstrap, invalid or short passwords, wrong credentials,
