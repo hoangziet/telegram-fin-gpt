@@ -32,11 +32,12 @@
   --surface-avatar: #e2e8dc;
   --surface-net: #eee9d9;
   --rule-error: #e4bdb7;
-  --shadow-nav: 0 3px 8px rgb(48 75 62 / 14%);
-  --shadow-menu: 0 16px 40px rgb(48 75 62 / 14%);
+  --shadow-surface: 0 8px 26px rgb(48 75 62 / 5%);
+  --shadow-nav: 0 2px 8px rgb(48 75 62 / 8%);
+  --shadow-menu: 0 12px 32px rgb(48 75 62 / 9%);
   --shadow-card-hover: 0 12px 30px rgb(48 75 62 / 8%);
   --shadow-focus: 0 0 0 3px rgb(82 107 72 / 18%);
-  --shadow-composer: 0 10px 32px rgb(48 75 62 / 10%);
+  --shadow-composer: 0 8px 28px rgb(48 75 62 / 6%);
   --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
   --font-body: 'DM Sans', 'Segoe UI', sans-serif;
   --font-number: 'DM Sans', 'Segoe UI', sans-serif;
@@ -65,11 +66,12 @@
   --color-primary-hover: #243b31;
   --card-bg: var(--surface);
   --card-border: var(--rule);
-  --card-radius: 20px;
-  --card-shadow: 0 8px 26px rgb(48 75 62 / 5%);
+  --card-radius: 12px;
+  --card-shadow: var(--shadow-surface);
   --shadow-card: var(--card-shadow);
   --input-border: #c9c0b1;
   --input-focus-ring: var(--focus);
+  --control-radius: 8px;
   --transition-fast: 180ms ease;
 }
 
@@ -107,11 +109,12 @@
     --surface-avatar: #333b2c;
     --surface-net: #2d3327;
     --rule-error: #4a3330;
-    --shadow-nav: 0 3px 8px rgb(0 0 0 / 40%);
-    --shadow-menu: 0 16px 40px rgb(0 0 0 / 45%);
-    --shadow-card-hover: 0 12px 30px rgb(0 0 0 / 35%);
+    --shadow-surface: 0 8px 26px rgb(16 27 20 / 12%);
+    --shadow-nav: 0 2px 8px rgb(16 27 20 / 16%);
+    --shadow-menu: 0 12px 32px rgb(16 27 20 / 20%);
+    --shadow-card-hover: 0 12px 30px rgb(16 27 20 / 16%);
     --shadow-focus: 0 0 0 3px rgb(195 217 168 / 25%);
-    --shadow-composer: 0 10px 32px rgb(0 0 0 / 35%);
+    --shadow-composer: 0 8px 28px rgb(16 27 20 / 16%);
     --color-rule-2: #4a5242;
     --color-primary-hover: #d7e2c4;
     --input-border: #454d3d;
@@ -148,8 +151,8 @@
   --color-primary-hover: #243b31;
   --card-bg: var(--surface);
   --card-border: var(--rule);
-  --card-radius: 20px;
-  --card-shadow: 0 8px 26px rgb(48 75 62 / 5%);
+  --card-radius: 12px;
+  --card-shadow: var(--shadow-surface);
   --shadow-card: var(--card-shadow);
   --input-border: #c9c0b1;
   --input-focus-ring: var(--focus);
@@ -239,7 +242,7 @@ body:has(.finance-shell) {
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--rule);
-  border-radius: 99px;
+  border-radius: var(--control-radius);
   background: var(--surface);
 }
 
@@ -252,13 +255,15 @@ body:has(.finance-shell) {
   min-height: 42px;
   padding: 8px 16px;
   border: 1px solid transparent;
-  border-radius: 99px;
+  border-radius: var(--control-radius);
   background: transparent;
   color: var(--ink-soft);
   cursor: pointer;
   font: 600 0.88rem var(--font-body);
   transition:
     background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
     color var(--transition-fast);
 }
 
@@ -290,7 +295,7 @@ body:has(.finance-shell) {
   min-height: 48px;
   padding: 4px 8px;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: transparent;
   color: var(--ink);
   cursor: pointer;
@@ -360,7 +365,7 @@ body:has(.finance-shell) {
   width: min(15rem, calc(100vw - 32px));
   padding: 6px;
   border: 1px solid var(--rule);
-  border-radius: 14px;
+  border-radius: var(--card-radius);
   background: var(--surface);
   box-shadow: var(--shadow-menu);
 }
@@ -373,7 +378,7 @@ body:has(.finance-shell) {
   min-height: 44px;
   padding: 8px 10px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--control-radius);
   background: transparent;
   color: var(--error);
   text-align: left;
@@ -445,7 +450,7 @@ body:has(.finance-shell) {
 
 .bento-kpi-grid {
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .bento-kpi-card,
@@ -459,7 +464,7 @@ body:has(.finance-shell) {
 .bento-kpi-card {
   min-width: 0;
   min-height: 158px;
-  padding: 23px 25px;
+  padding: 24px;
   transition:
     box-shadow var(--transition-fast),
     transform var(--transition-fast);
@@ -471,7 +476,7 @@ body:has(.finance-shell) {
 }
 
 .kpi-header {
-  margin-bottom: 22px;
+  margin-bottom: 24px;
 }
 
 .kpi-label,
@@ -676,7 +681,7 @@ body:has(.finance-shell) {
   display: grid;
   flex: 1;
   min-width: 0;
-  gap: 9px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -828,7 +833,7 @@ body:has(.finance-shell) {
 
 .btn-primary {
   min-height: 44px;
-  border-radius: 99px;
+  border-radius: var(--control-radius);
   background: var(--ink);
   color: var(--surface);
   box-shadow: none;
@@ -944,7 +949,7 @@ body:has(.finance-shell) {
   display: grid;
   justify-items: center;
   margin: clamp(24px, 6vh, 72px) auto 32px;
-  padding: 22px;
+  padding: 24px;
   text-align: center;
 }
 
@@ -978,14 +983,14 @@ body:has(.finance-shell) {
 
 .chat-suggestions {
   width: min(100%, 700px);
-  margin-top: 18px;
+  margin-top: 16px;
 }
 
 .chat-suggestions button {
   min-height: 48px;
-  padding: 11px 15px;
+  padding: 12px 16px;
   border: 1px solid var(--rule);
-  border-radius: 14px;
+  border-radius: var(--control-radius);
   background: var(--surface);
   color: var(--ink);
   text-align: left;
@@ -1020,7 +1025,7 @@ body:has(.finance-shell) {
   bottom: 12px;
   z-index: 3;
   width: min(100%, 850px);
-  margin: 22px auto 0;
+  margin: 24px auto 0;
   border-color: var(--rule);
   background: var(--surface-raised);
   box-shadow: var(--shadow-composer);
@@ -1059,7 +1064,7 @@ body:has(.finance-shell) {
 
 .history-date-field input {
   min-height: 44px;
-  border-radius: 11px;
+  border-radius: var(--control-radius);
 }
 
 .history-card,

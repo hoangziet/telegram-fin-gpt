@@ -18,7 +18,7 @@
   --card-bg: #ffffff;
   --card-border: rgba(15, 23, 42, 0.08);
   --card-radius: 12px;
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 16px -4px rgba(0, 0, 0, 0.06);
+  --card-shadow: 0 8px 26px rgb(48 75 62 / 5%);
   --input-border: #cbd5e1;
   --input-focus-ring: #2563eb;
   --transition-fast: 150ms ease;
@@ -72,7 +72,7 @@
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.1rem;
-  box-shadow: 0 2px 4px rgba(30, 64, 175, 0.25);
+  box-shadow: var(--shadow-nav);
 }
 
 .brand-name {
@@ -114,7 +114,12 @@
   font-size: 0.925rem;
   font-weight: 500;
   text-align: left;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .nav-button:hover {
@@ -393,7 +398,12 @@
   color: var(--color-ink-2);
   cursor: pointer;
   font-size: 0.8rem;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .btn-link:hover {
@@ -511,7 +521,7 @@
 .search-input:focus {
   outline: none;
   border-color: var(--input-focus-ring);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  box-shadow: var(--shadow-focus);
 }
 
 .btn-clear-search {
@@ -538,7 +548,12 @@
   cursor: pointer;
   font-size: 0.825rem;
   font-weight: 500;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .filter-chip:hover {
@@ -687,4 +702,36 @@
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+/* Shared control geometry and state timing across the product shell. */
+.btn-primary,
+.btn-secondary,
+.btn-link,
+.filter-chip,
+.prompt-chip,
+.search-input {
+  border-radius: var(--control-radius);
+}
+
+.account-trigger,
+.account-menu-item,
+.mobile-nav-item,
+.btn-close,
+.btn-clear-search,
+.chat-attach-button,
+.chat-attachment button,
+.chat-composer,
+.search-input,
+.text-input,
+.select-input,
+.date-input,
+.time-input,
+.input-with-affix,
+.history-date-field input {
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }

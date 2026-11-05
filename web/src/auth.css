@@ -122,9 +122,9 @@
   min-width: 0;
   padding: var(--space-2xl);
   border: 1px solid var(--color-rule-2);
-  border-radius: 24px;
+  border-radius: var(--card-radius);
   background: var(--color-paper-2);
-  box-shadow: 0 18px 50px rgb(48 75 62 / 12%);
+  box-shadow: 0 12px 32px rgb(48 75 62 / 9%);
   color: var(--color-ink);
 }
 
@@ -165,7 +165,7 @@
   min-height: var(--auth-hit-target);
   padding: var(--space-xs) var(--space-md);
   border: var(--rule-hair) solid var(--color-muted);
-  border-radius: 12px;
+  border-radius: var(--control-radius);
   outline: 2px solid transparent;
   outline-offset: -3px;
   background: var(--color-paper);
@@ -206,7 +206,7 @@
   min-height: var(--auth-hit-target);
   padding-inline: var(--space-lg);
   border: 0;
-  border-radius: var(--radius-pill);
+  border-radius: var(--control-radius);
   background: var(--color-accent);
   color: var(--color-accent-ink);
   cursor: pointer;
