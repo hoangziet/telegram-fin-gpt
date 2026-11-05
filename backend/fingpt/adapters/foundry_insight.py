@@ -9,6 +9,7 @@ here — an insight widget is a convenience, not a promised capability.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -105,5 +106,10 @@ def _extract_text(payload: Any) -> str:
             if isinstance(part, dict) and part.get("type") == "output_text":
                 text = part.get("text")
                 if isinstance(text, str) and 0 < len(text) <= 300:
+                    lowered = text.casefold()
+                    if any(term in lowered for term in ("doanh thu", "thu nhập", "revenue")) or re.search(
+                        r"\bincome\b", text, re.IGNORECASE
+                    ):
+                        raise InsightInferenceError("Insight phrasing mislabeled spending as income.")
                     return text
     raise InsightInferenceError("Insight phrasing returned no usable sentence.")
