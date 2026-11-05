@@ -63,6 +63,8 @@
   --font-display: 'Geologica', ui-sans-serif, system-ui, sans-serif;
   --font-body: 'Geologica', ui-sans-serif, system-ui, sans-serif;
   --radius-card: 4px;
+  --control-radius: 8px;
+  --card-radius: 12px;
   --radius-pill: 999px;
   --rule-hair: 1px;
   --tick: 10px;

@@ -14,7 +14,7 @@
 }
 .history-filters {
   display: grid;
-  gap: 18px;
+  gap: 16px;
 }
 .history-filter-top,
 .history-filter-bottom {
@@ -31,7 +31,7 @@
 .history-filter-bottom .filter-chips-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 .history-filters .filter-chip {
   min-height: 44px;
@@ -39,7 +39,7 @@
 }
 .history-date-field {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   color: var(--color-muted);
   font-size: 0.8rem;
 }
@@ -47,7 +47,7 @@
   min-height: 44px;
   padding: 8px 12px;
   border: 1px solid var(--color-rule-2);
-  border-radius: 10px;
+  border-radius: var(--control-radius);
   background: var(--color-paper-2);
   color: var(--color-ink);
   font: inherit;
@@ -89,7 +89,7 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px 20px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .history-analysis-heading h2,
 .history-table-heading h2 {
@@ -114,7 +114,7 @@
   gap: 12px;
 }
 .history-currency-card {
-  padding: 18px 20px;
+  padding: 20px;
 }
 .history-currency-card h3 {
   color: var(--color-accent);
@@ -129,7 +129,7 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 .history-currency-card dt {
   color: var(--color-muted);
@@ -141,13 +141,13 @@
   text-align: right;
 }
 .history-currency-card .history-net {
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid var(--color-rule);
 }
 .history-summary-empty {
   padding: 20px;
   border: 1px solid var(--color-rule);
-  border-radius: 12px;
+  border-radius: var(--card-radius);
   color: var(--color-muted);
 }
 .history-summary-note {
@@ -177,7 +177,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 18px;
+  margin-top: 16px;
 }
 .history-pagination > span {
   color: var(--color-ink-2);
@@ -225,12 +225,12 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     border: 1px solid var(--color-rule);
-    border-radius: 12px;
+    border-radius: var(--card-radius);
     padding: 8px;
   }
   .transaction-history-table td {
     min-width: 0;
-    padding: 9px;
+    padding: 8px;
     border: 0;
   }
   .transaction-history-table td:first-child,
