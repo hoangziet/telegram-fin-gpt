@@ -11,8 +11,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from werkzeug.utils import secure_filename
 
+from fingpt.adapters.anthropic_image_extractor import ImageInferenceError
 from fingpt.adapters.evidence_storage import EvidenceStorageError, PrivateEvidenceStorage
-from fingpt.adapters.foundry_image_extractor import ImageInferenceError
 from fingpt.domain.csv_import import MAX_CSV_BYTES, CsvImportError
 from fingpt.domain.image_extraction import ImageExtractionError
 from fingpt.persistence.models import DraftItem

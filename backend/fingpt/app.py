@@ -16,11 +16,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from werkzeug.exceptions import RequestEntityTooLarge
 
+from fingpt.adapters.anthropic_chat import AnthropicChat
+from fingpt.adapters.anthropic_image_extractor import AnthropicImageExtractor
+from fingpt.adapters.anthropic_insight import AnthropicInsight
+from fingpt.adapters.anthropic_router import AnthropicRouter
 from fingpt.adapters.evidence_storage import create_evidence_storage
-from fingpt.adapters.foundry_chat import FoundryChat
-from fingpt.adapters.foundry_image_extractor import FoundryImageExtractor
-from fingpt.adapters.foundry_insight import FoundryInsight
-from fingpt.adapters.foundry_router import FoundryRouter
 from fingpt.api.auth import register_auth
 from fingpt.api.chat import register_chat
 from fingpt.api.drafts import register_drafts
@@ -29,7 +29,6 @@ from fingpt.api.transactions import register_transactions
 from fingpt.api.webhooks import register_webhooks
 from fingpt.operations import register_operations
 from fingpt.persistence.models import AuthSession, User
-from fingpt.service_bus_operations import register_service_bus_operations
 from fingpt.services.auth import digest_session_token
 from fingpt.services.chat_orchestration import ChatOrchestrator, InsightSpecialist
 from fingpt.services.insights import spending_trend
@@ -49,10 +48,12 @@ def create_app(overrides: dict[str, Any] | None = None, *, engine: Engine | None
         FINGPT_DEPLOYMENT_ENV=os.environ.get("FINGPT_DEPLOYMENT_ENV", "development"),
         EVIDENCE_STORAGE_MODE=os.environ.get("FINGPT_EVIDENCE_STORAGE_MODE", "filesystem"),
         EVIDENCE_STORAGE_DIRECTORY=os.environ.get("FINGPT_EVIDENCE_DIRECTORY", ".local/evidence"),
-        EVIDENCE_BLOB_ACCOUNT_URL=os.environ.get("FINGPT_EVIDENCE_BLOB_ACCOUNT_URL"),
-        EVIDENCE_BLOB_CONTAINER=os.environ.get("FINGPT_EVIDENCE_BLOB_CONTAINER"),
-        FOUNDRY_OPENAI_BASE_URL=os.environ.get("FINGPT_FOUNDRY_OPENAI_BASE_URL"),
-        FOUNDRY_MODEL=os.environ.get("FINGPT_FOUNDRY_MODEL"),
+        EVIDENCE_R2_ACCOUNT_ID=os.environ.get("FINGPT_EVIDENCE_R2_ACCOUNT_ID"),
+        EVIDENCE_R2_BUCKET=os.environ.get("FINGPT_EVIDENCE_R2_BUCKET"),
+        EVIDENCE_R2_ACCESS_KEY_ID=os.environ.get("FINGPT_EVIDENCE_R2_ACCESS_KEY_ID"),
+        EVIDENCE_R2_SECRET_ACCESS_KEY=os.environ.get("FINGPT_EVIDENCE_R2_SECRET_ACCESS_KEY"),
+        ANTHROPIC_API_KEY=os.environ.get("FINGPT_ANTHROPIC_API_KEY"),
+        ANTHROPIC_MODEL=os.environ.get("FINGPT_ANTHROPIC_MODEL"),
         WEB_DIRECTORY=os.environ.get(
             "FINGPT_WEB_DIRECTORY",
             str(Path(__file__).resolve().parents[2] / "web" / "dist"),
@@ -70,8 +71,8 @@ def create_app(overrides: dict[str, Any] | None = None, *, engine: Engine | None
     secret_key = app.config["SECRET_KEY"]
     if not isinstance(secret_key, str) or len(secret_key.encode()) < 32 or "replace-with" in secret_key:
         raise RuntimeError("Set FIN_GPT_SECRET_KEY to a random secret of at least 32 bytes.")
-    if app.config["FINGPT_DEPLOYMENT_ENV"] == "production" and app.config["EVIDENCE_STORAGE_MODE"] != "azure":
-        raise RuntimeError("Production must use private Azure Blob Storage for evidence.")
+    if app.config["FINGPT_DEPLOYMENT_ENV"] == "production" and app.config["EVIDENCE_STORAGE_MODE"] != "r2":
+        raise RuntimeError("Production must use private R2 storage for evidence.")
 
     hasher: PasswordHasher = app.config.get("PASSWORD_HASHER") or PasswordHasher(
         time_cost=3,
@@ -90,25 +91,27 @@ def create_app(overrides: dict[str, Any] | None = None, *, engine: Engine | None
         app.extensions["evidence_storage"] = create_evidence_storage(
             mode=app.config["EVIDENCE_STORAGE_MODE"],
             local_root=app.config["EVIDENCE_STORAGE_DIRECTORY"],
-            azure_account_url=app.config["EVIDENCE_BLOB_ACCOUNT_URL"],
-            azure_container=app.config["EVIDENCE_BLOB_CONTAINER"],
+            r2_account_id=app.config["EVIDENCE_R2_ACCOUNT_ID"],
+            r2_bucket=app.config["EVIDENCE_R2_BUCKET"],
+            r2_access_key_id=app.config["EVIDENCE_R2_ACCESS_KEY_ID"],
+            r2_secret_access_key=app.config["EVIDENCE_R2_SECRET_ACCESS_KEY"],
         )
-    image_endpoint = app.config["FOUNDRY_OPENAI_BASE_URL"]
-    image_model = app.config["FOUNDRY_MODEL"]
-    if image_endpoint and image_model:
-        app.extensions["image_extractor"] = FoundryImageExtractor(image_endpoint, image_model)
-        app.extensions["chat_assistant"] = FoundryChat(image_endpoint, image_model)
+    api_key = app.config["ANTHROPIC_API_KEY"]
+    model = app.config["ANTHROPIC_MODEL"]
+    if api_key and model:
+        app.extensions["image_extractor"] = AnthropicImageExtractor(api_key, model)
+        app.extensions["chat_assistant"] = AnthropicChat(api_key, model)
     if app.config.get("CHAT_ASSISTANT") is not None:
         app.extensions["chat_assistant"] = app.config["CHAT_ASSISTANT"]
 
     router = app.config.get("CHAT_ROUTER")
-    if router is None and image_endpoint and image_model:
-        router = FoundryRouter(image_endpoint, image_model)
+    if router is None and api_key and model:
+        router = AnthropicRouter(api_key, model)
     app.extensions["chat_orchestrator"] = ChatOrchestrator(router)
 
     narrator = app.config.get("INSIGHT_ASSISTANT")
-    if narrator is None and image_endpoint and image_model:
-        narrator = FoundryInsight(image_endpoint, image_model)
+    if narrator is None and api_key and model:
+        narrator = AnthropicInsight(api_key, model)
     app.extensions["insight_specialist"] = InsightSpecialist(narrator, spending_trend)
 
     @app.errorhandler(RequestEntityTooLarge)
@@ -123,7 +126,6 @@ def create_app(overrides: dict[str, Any] | None = None, *, engine: Engine | None
     register_transactions(app)
     register_webhooks(app)
     register_operations(app)
-    register_service_bus_operations(app)
     _register_web_routes(app, Path(app.config["WEB_DIRECTORY"]))
 
     @app.before_request

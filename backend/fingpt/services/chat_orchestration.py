@@ -17,8 +17,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from fingpt.adapters.foundry_insight import InsightInferenceError
-from fingpt.adapters.foundry_router import RouterInferenceError
+from fingpt.adapters.anthropic_insight import InsightInferenceError
+from fingpt.adapters.anthropic_router import RouterInferenceError
 
 
 class _Router(Protocol):

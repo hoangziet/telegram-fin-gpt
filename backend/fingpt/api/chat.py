@@ -11,7 +11,7 @@ from flask import Blueprint, Flask, current_app, g, jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from fingpt.adapters.foundry_chat import ChatInferenceError
+from fingpt.adapters.anthropic_chat import ChatInferenceError
 from fingpt.services.chat import NoClarification, clarify_item, monthly_summary
 from fingpt.services.chat_orchestration import ChatIntent, ChatOrchestrator, is_explicit_question
 from fingpt.services.drafts import (
