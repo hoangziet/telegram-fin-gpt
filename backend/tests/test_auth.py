@@ -143,7 +143,9 @@ def test_login_failure_is_generic_and_rate_limited(client: FlaskClient, app: Fla
     ]
 
     assert responses[0].status_code == 401
-    assert responses[0].json == {"error": {"code": "invalid_credentials", "message": "Invalid username or password."}}
+    assert responses[0].json == {
+        "error": {"code": "invalid_credentials", "message": "Tên đăng nhập hoặc mật khẩu không đúng."}
+    }
     assert responses[-1].status_code == 429
     assert int(responses[-1].headers["Retry-After"]) > 0
 
@@ -308,7 +310,7 @@ def test_change_password_rolls_back_database_failure(
             json={"currentPassword": "Strong test password! 2026", "newPassword": "Another strong password! 2026"},
         )
     assert response.status_code == 503
-    assert response.json == {"error": {"code": "service_unavailable", "message": "Service is unavailable."}}
+    assert response.json == {"error": {"code": "service_unavailable", "message": "Dịch vụ không khả dụng."}}
     assert (
         client.post(
             "/api/auth/login", json={"username": "owner", "password": "Strong test password! 2026"}

@@ -38,13 +38,13 @@ def ask() -> tuple[Any, int]:
         or set(payload) - {"question", "language", "history"}
         or not {"question", "language"} <= set(payload)
     ):
-        return _error("invalid_request", "Send a question and a language."), 400
+        return _error("invalid_request", "Gửi câu hỏi và ngôn ngữ."), 400
     question = payload["question"]
     language = payload["language"]
     if not isinstance(question, str) or not question.strip() or len(question) > 1_000:
-        return _error("invalid_question", "Question must contain 1–1,000 characters."), 422
+        return _error("invalid_question", "Câu hỏi phải có từ 1–1.000 ký tự."), 422
     if language not in ("vi", "en"):
-        return _error("invalid_language", "Choose vi or en."), 422
+        return _error("invalid_language", "Chọn vi hoặc en."), 422
     history = payload.get("history", [])
     if (
         not isinstance(history, list)
@@ -58,22 +58,22 @@ def ask() -> tuple[Any, int]:
             for turn in history
         )
     ):
-        return _error("invalid_history", "Chat history is invalid."), 422
+        return _error("invalid_history", "Lịch sử trò chuyện không hợp lệ."), 422
     assistant = current_app.extensions.get("chat_assistant")
     if assistant is None:
-        return _error("chat_unavailable", "AI chat is not configured."), 503
+        return _error("chat_unavailable", "Trò chuyện AI chưa được cấu hình."), 503
     database: Session = g.database_session
     try:
         context = monthly_summary(database, g.auth_user.id)
         answer = assistant.answer(question=question.strip(), language=language, context=context, history=history)
     except SQLAlchemyError:
         current_app.logger.warning("Chat summary query failed")
-        return _error("service_unavailable", "Chat data is temporarily unavailable."), 503
+        return _error("service_unavailable", "Dữ liệu trò chuyện tạm thời không khả dụng."), 503
     except ChatInferenceError:
         current_app.logger.warning("Chat inference unavailable")
-        return _error("chat_unavailable", "AI chat is temporarily unavailable."), 503
+        return _error("chat_unavailable", "Trò chuyện AI tạm thời không khả dụng."), 503
     if not isinstance(answer, str) or not answer.strip() or len(answer) > 8_000:
-        return _error("invalid_answer", "AI chat returned an invalid answer."), 503
+        return _error("invalid_answer", "Trò chuyện AI trả về câu trả lời không hợp lệ."), 503
     return jsonify(answer=answer), 200
 
 
@@ -82,16 +82,16 @@ def message() -> tuple[Any, int]:
     """Coordinate one chat surface across read-only Q&A and draft-intake agents."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or set(payload) - {"message", "language", "history", "draftContext"}:
-        return _error("invalid_request", "Send a message, language, and optional history."), 400
+        return _error("invalid_request", "Gửi tin nhắn, ngôn ngữ và lịch sử nếu có."), 400
     text = payload.get("message")
     language = payload.get("language")
     history = payload.get("history", [])
     if not isinstance(text, str) or not text.strip() or len(text) > 8_000:
-        return _error("invalid_message", "Message must contain 1–8,000 characters."), 422
+        return _error("invalid_message", "Tin nhắn phải có từ 1–8.000 ký tự."), 422
     if language not in ("vi", "en"):
-        return _error("invalid_language", "Choose vi or en."), 422
+        return _error("invalid_language", "Chọn vi hoặc en."), 422
     if not _valid_history(history):
-        return _error("invalid_history", "Chat history is invalid."), 422
+        return _error("invalid_history", "Lịch sử trò chuyện không hợp lệ."), 422
 
     message_text = text.strip()
     orchestrator: ChatOrchestrator = current_app.extensions["chat_orchestrator"]
@@ -100,7 +100,7 @@ def message() -> tuple[Any, int]:
         return _create_transaction_draft(message_text)
     if intent is ChatIntent.INSIGHT:
         if len(message_text) > 1_000:
-            return _error("invalid_question", "Questions must be at most 1,000 characters."), 422
+            return _error("invalid_question", "Câu hỏi không được quá 1.000 ký tự."), 422
         return _answer_insight(language)
 
     draft_context, context_error = _validated_draft_context(payload.get("draftContext"))
@@ -108,12 +108,12 @@ def message() -> tuple[Any, int]:
         return context_error
     if draft_context is not None and not is_explicit_question(message_text):
         if len(message_text) > 1_000:
-            return _error("invalid_reply", "Draft replies must be at most 1,000 characters."), 422
+            return _error("invalid_reply", "Phản hồi bản nháp không được quá 1.000 ký tự."), 422
         clarification = _try_clarification(message_text, draft_context)
         if clarification is not None:
             return clarification
     if len(message_text) > 1_000:
-        return _error("invalid_question", "Questions must be at most 1,000 characters."), 422
+        return _error("invalid_question", "Câu hỏi không được quá 1.000 ký tự."), 422
     return _answer_question(message_text, language, history)
 
 
@@ -124,15 +124,15 @@ def _validated_draft_context(
     if value is None:
         return None, None
     if not isinstance(value, dict) or set(value) != {"draftId", "itemId", "expectedVersion"}:
-        return None, (_error("invalid_draft_context", "Draft context fields are invalid."), 400)
+        return None, (_error("invalid_draft_context", "Các trường ngữ cảnh bản nháp không hợp lệ."), 400)
     try:
         draft_id = UUID(value["draftId"])
         item_id = UUID(value["itemId"])
     except (ValueError, TypeError, AttributeError):
-        return None, (_error("invalid_draft_context", "Draft and item IDs must be UUIDs."), 400)
+        return None, (_error("invalid_draft_context", "ID bản nháp và mục phải là UUID."), 400)
     version = value["expectedVersion"]
     if not isinstance(version, int) or isinstance(version, bool) or version < 1:
-        return None, (_error("invalid_draft_context", "Draft item version must be positive."), 400)
+        return None, (_error("invalid_draft_context", "Phiên bản mục bản nháp phải là số dương."), 400)
     return (draft_id, item_id, version), None
 
 
@@ -152,15 +152,15 @@ def _try_clarification(text: str, context: tuple[UUID, UUID, int]) -> tuple[Any,
     except NoClarification:
         return None
     except LookupError:
-        return _error("draft_item_not_found", "Draft item was not found."), 404
+        return _error("draft_item_not_found", "Không tìm thấy mục bản nháp."), 404
     except DraftConfirmationConflict:
-        return _error("stale_draft", "Draft changed; reload it before replying."), 409
+        return _error("stale_draft", "Bản nháp đã thay đổi; hãy tải lại trước khi trả lời."), 409
     except ValueError:
-        return _error("invalid_reply", "Reply could not be applied to this draft."), 422
+        return _error("invalid_reply", "Không thể áp dụng phản hồi cho bản nháp này."), 422
     except SQLAlchemyError:
         database.rollback()
         current_app.logger.warning("Draft clarification failed")
-        return _error("service_unavailable", "Draft service is temporarily unavailable."), 503
+        return _error("service_unavailable", "Dịch vụ bản nháp tạm thời không khả dụng."), 503
 
     from fingpt.api.drafts import _serialize_item
 
@@ -174,11 +174,11 @@ def _create_transaction_draft(text: str) -> tuple[Any, int]:
         text,
         flags=re.IGNORECASE,
     ):
-        return _error("unsupported_currency", "Confirm the currency in the transaction preview."), 422
+        return _error("unsupported_currency", "Xác nhận loại tiền trong bản xem trước giao dịch."), 422
     try:
         idempotency_key = str(UUID(request.headers.get("Idempotency-Key", "")))
     except ValueError:
-        return _error("invalid_idempotency_key", "Send a valid UUID in Idempotency-Key."), 400
+        return _error("invalid_idempotency_key", "Gửi UUID hợp lệ trong Idempotency-Key."), 400
 
     database: Session = g.database_session
     try:
@@ -193,13 +193,13 @@ def _create_transaction_draft(text: str) -> tuple[Any, int]:
     except DraftIdempotencyConflict as error:
         return _error("idempotency_conflict", str(error)), 409
     except ConversationNotFound:
-        return _error("conversation_not_found", "Conversation was not found."), 404
+        return _error("conversation_not_found", "Không tìm thấy cuộc trò chuyện."), 404
     except ValueError as error:
         return _error("invalid_draft", str(error)), 422
     except SQLAlchemyError:
         database.rollback()
         current_app.logger.warning("Chat transaction draft creation failed")
-        return _error("service_unavailable", "Draft service is temporarily unavailable."), 503
+        return _error("service_unavailable", "Dịch vụ bản nháp tạm thời không khả dụng."), 503
 
     from fingpt.api.drafts import _serialize_draft
 
@@ -210,19 +210,19 @@ def _answer_question(text: str, language: str, history: list[dict[str, str]]) ->
     """Send read-only chat to the Q&A specialist with aggregate-only context."""
     assistant = current_app.extensions.get("chat_assistant")
     if assistant is None:
-        return _error("chat_unavailable", "AI chat is not configured."), 503
+        return _error("chat_unavailable", "Trò chuyện AI chưa được cấu hình."), 503
     database: Session = g.database_session
     try:
         context = monthly_summary(database, g.auth_user.id)
         answer = assistant.answer(question=text, language=language, context=context, history=history)
     except SQLAlchemyError:
         current_app.logger.warning("Chat summary query failed")
-        return _error("service_unavailable", "Chat data is temporarily unavailable."), 503
+        return _error("service_unavailable", "Dữ liệu trò chuyện tạm thời không khả dụng."), 503
     except ChatInferenceError:
         current_app.logger.warning("Chat inference unavailable")
-        return _error("chat_unavailable", "AI chat is temporarily unavailable."), 503
+        return _error("chat_unavailable", "Trò chuyện AI tạm thời không khả dụng."), 503
     if not isinstance(answer, str) or not answer.strip() or len(answer) > 8_000:
-        return _error("invalid_answer", "AI chat returned an invalid answer."), 503
+        return _error("invalid_answer", "Trò chuyện AI trả về câu trả lời không hợp lệ."), 503
     return jsonify(intent=ChatIntent.QUESTION, answer=answer), 200
 
 
@@ -231,7 +231,7 @@ def insight() -> tuple[Any, int]:
     """Return one read-only spending-trend sentence for the Dashboard widget."""
     language = request.args.get("language", "vi")
     if language not in ("vi", "en"):
-        return _error("invalid_language", "Choose vi or en."), 422
+        return _error("invalid_language", "Chọn vi hoặc en."), 422
     return _answer_insight(language)
 
 
@@ -239,13 +239,13 @@ def _answer_insight(language: str) -> tuple[Any, int]:
     """Send a trend/comparison question to the read-only insight specialist."""
     specialist = current_app.extensions.get("insight_specialist")
     if specialist is None:
-        return _error("chat_unavailable", "AI chat is not configured."), 503
+        return _error("chat_unavailable", "Trò chuyện AI chưa được cấu hình."), 503
     database: Session = g.database_session
     try:
         answer = specialist.narrate(database, g.auth_user.id, language=language)
     except SQLAlchemyError:
         current_app.logger.warning("Insight query failed")
-        return _error("service_unavailable", "Chat data is temporarily unavailable."), 503
+        return _error("service_unavailable", "Dữ liệu trò chuyện tạm thời không khả dụng."), 503
     return jsonify(intent=ChatIntent.INSIGHT, answer=answer), 200
 
 
@@ -270,34 +270,34 @@ def reply_to_draft(draft_id: UUID) -> tuple[Any, int]:
     """Apply only explicit missing date/period facts to one versioned draft item."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or set(payload) != {"itemId", "expectedVersion", "text"}:
-        return _error("invalid_request", "Send itemId, expectedVersion, and text."), 400
+        return _error("invalid_request", "Gửi itemId, expectedVersion và text."), 400
     text = payload["text"]
     version = payload["expectedVersion"]
     if not isinstance(text, str) or not text.strip() or len(text) > 1_000:
-        return _error("invalid_text", "Reply must contain 1–1,000 characters."), 422
+        return _error("invalid_text", "Phản hồi phải có từ 1–1.000 ký tự."), 422
     if not isinstance(version, int) or isinstance(version, bool) or version < 1:
-        return _error("invalid_version", "expectedVersion must be positive."), 400
+        return _error("invalid_version", "expectedVersion phải là số dương."), 400
     try:
         item_id = UUID(payload["itemId"])
     except (ValueError, TypeError, AttributeError):
-        return _error("invalid_item", "itemId must be a UUID."), 400
+        return _error("invalid_item", "itemId phải là UUID."), 400
     database: Session = g.database_session
     try:
         updated = clarify_item(
             database, user_id=g.auth_user.id, draft_id=draft_id, item_id=item_id, version=version, text=text
         )
     except LookupError:
-        return _error("draft_item_not_found", "Draft item was not found."), 404
+        return _error("draft_item_not_found", "Không tìm thấy mục bản nháp."), 404
     except DraftConfirmationConflict:
-        return _error("stale_draft", "Draft changed; reload it before replying."), 409
+        return _error("stale_draft", "Bản nháp đã thay đổi; hãy tải lại trước khi trả lời."), 409
     except NoClarification:
-        return _error("no_clarification", "Reply with one missing date or day period."), 422
+        return _error("no_clarification", "Trả lời bằng một ngày hoặc buổi trong ngày còn thiếu."), 422
     except ValueError:
-        return _error("invalid_reply", "Reply could not be applied to this draft."), 422
+        return _error("invalid_reply", "Không thể áp dụng phản hồi cho bản nháp này."), 422
     except SQLAlchemyError:
         database.rollback()
         current_app.logger.warning("Draft clarification failed")
-        return _error("service_unavailable", "Draft is temporarily unavailable."), 503
+        return _error("service_unavailable", "Bản nháp tạm thời không khả dụng."), 503
     from fingpt.api.drafts import _serialize_item
 
     return jsonify(item=_serialize_item(updated)), 200

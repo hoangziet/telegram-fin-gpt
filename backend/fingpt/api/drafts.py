@@ -44,7 +44,7 @@ def create_draft() -> tuple[Any, int] | Any:
         return error
     idempotency_key = _validated_idempotency_key()
     if idempotency_key is None:
-        return _error("invalid_idempotency_key", "Send a valid UUID in Idempotency-Key."), 400
+        return _error("invalid_idempotency_key", "Gửi UUID hợp lệ trong Idempotency-Key."), 400
 
     database: Session = g.database_session
     try:
@@ -59,13 +59,13 @@ def create_draft() -> tuple[Any, int] | Any:
     except DraftIdempotencyConflict as error:
         return _error("idempotency_conflict", str(error)), 409
     except ConversationNotFound:
-        return _error("conversation_not_found", "Conversation was not found."), 404
+        return _error("conversation_not_found", "Không tìm thấy cuộc trò chuyện."), 404
     except ValueError as error:
         return _error("invalid_draft", str(error)), 422
     except SQLAlchemyError:
         current_app.logger.warning("Draft creation failed because the database operation failed")
         database.rollback()
-        return _error("service_unavailable", "Draft service is temporarily unavailable."), 503
+        return _error("service_unavailable", "Dịch vụ bản nháp tạm thời không khả dụng."), 503
 
     response_status = 200 if replayed else 201
     return jsonify(draft=_serialize_draft(snapshot), replayed=replayed), response_status
@@ -77,15 +77,15 @@ def list_open_drafts() -> tuple[Any, int] | Any:
     try:
         limit = int(request.args.get("limit", "20"))
     except ValueError:
-        return _error("invalid_query", "limit must be an integer."), 400
+        return _error("invalid_query", "limit phải là số nguyên."), 400
     if limit < 1 or limit > 50:
-        return _error("invalid_query", "limit must be between 1 and 50."), 400
+        return _error("invalid_query", "limit phải từ 1 đến 50."), 400
     database: Session = g.database_session
     try:
         snapshots = list_open_draft_snapshots(database, g.auth_user.id, limit=limit)
     except SQLAlchemyError:
         current_app.logger.warning("Draft list failed because the database operation failed")
-        return _error("service_unavailable", "Draft service is temporarily unavailable."), 503
+        return _error("service_unavailable", "Dịch vụ bản nháp tạm thời không khả dụng."), 503
     return jsonify(items=[_serialize_draft(snapshot) for snapshot in snapshots]), 200
 
 
@@ -97,9 +97,9 @@ def read_draft(draft_id: UUID) -> tuple[Any, int] | Any:
         snapshot = get_draft_snapshot(database, g.auth_user.id, draft_id)
     except SQLAlchemyError:
         current_app.logger.warning("Draft read failed because the database operation failed")
-        return _error("service_unavailable", "Draft service is temporarily unavailable."), 503
+        return _error("service_unavailable", "Dịch vụ bản nháp tạm thời không khả dụng."), 503
     if snapshot is None:
-        return _error("draft_not_found", "Draft was not found."), 404
+        return _error("draft_not_found", "Không tìm thấy bản nháp."), 404
     return jsonify(draft=_serialize_draft(snapshot), replayed=False), 200
 
 
@@ -111,20 +111,20 @@ def draft_evidence_content(draft_id: UUID) -> tuple[Any, int] | Any:
         snapshot = get_draft_snapshot(database, g.auth_user.id, draft_id)
     except SQLAlchemyError:
         current_app.logger.warning("Draft evidence lookup failed")
-        return _error("service_unavailable", "Evidence is temporarily unavailable."), 503
+        return _error("service_unavailable", "Chứng từ tạm thời không khả dụng."), 503
     if snapshot is None:
-        return _error("draft_not_found", "Draft was not found."), 404
+        return _error("draft_not_found", "Không tìm thấy bản nháp."), 404
     evidence = snapshot.evidence
     if evidence.storage_key is None or evidence.source_type not in {"image", "csv"}:
-        return _error("evidence_content_unavailable", "File evidence is unavailable."), 404
+        return _error("evidence_content_unavailable", "Tệp chứng từ không khả dụng."), 404
     if evidence.media_type not in {"image/jpeg", "image/png", "image/webp", "text/csv"}:
-        return _error("evidence_unavailable", "Evidence type is unavailable."), 503
+        return _error("evidence_unavailable", "Loại chứng từ không khả dụng."), 503
     storage: PrivateEvidenceStorage = current_app.extensions["evidence_storage"]
     try:
         content = storage.read(evidence.storage_key)
     except EvidenceStorageError:
         current_app.logger.warning("Private draft evidence could not be reopened")
-        return _error("evidence_unavailable", "Evidence is unavailable."), 503
+        return _error("evidence_unavailable", "Chứng từ không khả dụng."), 503
     response = send_file(
         BytesIO(content),
         mimetype=evidence.media_type,
@@ -141,22 +141,22 @@ def draft_evidence_content(draft_id: UUID) -> tuple[Any, int] | Any:
 def _validated_body() -> tuple[dict[str, Any], tuple[Any, int] | None]:
     """Validate the supported JSON fields before domain interpretation."""
     if not request.is_json:
-        return {}, (_error("json_required", "Send a JSON request."), 415)
+        return {}, (_error("json_required", "Gửi yêu cầu JSON."), 415)
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or set(payload) - {"text", "conversationId"}:
-        return {}, (_error("invalid_request", "Draft request fields are invalid."), 400)
+        return {}, (_error("invalid_request", "Các trường yêu cầu bản nháp không hợp lệ."), 400)
     text = payload.get("text")
     if not isinstance(text, str) or not text.strip() or len(text) > 8_000:
-        return {}, (_error("invalid_text", "Text must contain 1–8,000 characters."), 422)
+        return {}, (_error("invalid_text", "Nội dung phải có từ 1–8.000 ký tự."), 422)
     conversation_id: UUID | None = None
     raw_conversation_id = payload.get("conversationId")
     if raw_conversation_id is not None:
         if not isinstance(raw_conversation_id, str):
-            return {}, (_error("invalid_conversation_id", "Conversation ID must be a UUID."), 400)
+            return {}, (_error("invalid_conversation_id", "ID cuộc trò chuyện phải là UUID."), 400)
         try:
             conversation_id = UUID(raw_conversation_id)
         except ValueError:
-            return {}, (_error("invalid_conversation_id", "Conversation ID must be a UUID."), 400)
+            return {}, (_error("invalid_conversation_id", "ID cuộc trò chuyện phải là UUID."), 400)
     return {"text": text, "conversation_id": conversation_id}, None
 
 
@@ -226,13 +226,13 @@ def confirm_item(draft_id: UUID, item_id: UUID) -> tuple[Any, int] | Any:
     """Confirm one previously previewed item after its version is checked."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or set(payload) != {"expectedVersion"}:
-        return _error("invalid_request", "Send only expectedVersion as a positive integer."), 400
+        return _error("invalid_request", "Chỉ gửi expectedVersion dưới dạng số nguyên dương."), 400
     expected_version = payload["expectedVersion"]
     if not isinstance(expected_version, int) or isinstance(expected_version, bool) or expected_version < 1:
-        return _error("invalid_request", "expectedVersion must be a positive integer."), 400
+        return _error("invalid_request", "expectedVersion phải là số nguyên dương."), 400
     idempotency_key = _validated_idempotency_key()
     if idempotency_key is None:
-        return _error("invalid_idempotency_key", "Send a valid UUID in Idempotency-Key."), 400
+        return _error("invalid_idempotency_key", "Gửi UUID hợp lệ trong Idempotency-Key."), 400
 
     from fingpt.services.drafts import DraftItemNotReady, confirm_draft_item
 
@@ -247,7 +247,7 @@ def confirm_item(draft_id: UUID, item_id: UUID) -> tuple[Any, int] | Any:
             idempotency_key=idempotency_key,
         )
     except LookupError:
-        return _error("draft_item_not_found", "Draft item was not found."), 404
+        return _error("draft_item_not_found", "Không tìm thấy mục bản nháp."), 404
     except DraftConfirmationConflict as error:
         return _error("confirmation_conflict", str(error)), 409
     except DraftItemNotReady as error:
@@ -255,7 +255,7 @@ def confirm_item(draft_id: UUID, item_id: UUID) -> tuple[Any, int] | Any:
     except SQLAlchemyError:
         database.rollback()
         current_app.logger.warning("Draft confirmation failed because the database operation failed")
-        return _error("service_unavailable", "Confirmation service is temporarily unavailable."), 503
+        return _error("service_unavailable", "Dịch vụ xác nhận tạm thời không khả dụng."), 503
     return jsonify(transaction=_serialize_transaction(transaction), replayed=replayed), 200 if replayed else 201
 
 
@@ -282,7 +282,7 @@ def edit_draft_item(draft_id: UUID, item_id: UUID) -> tuple[Any, int] | Any:
     """Apply user-confirmed corrections to a draft preview, never a transaction."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
-        return _error("invalid_request", "Send a JSON object."), 400
+        return _error("invalid_request", "Gửi một đối tượng JSON."), 400
     allowed = {
         "expectedVersion",
         "description",
@@ -295,10 +295,10 @@ def edit_draft_item(draft_id: UUID, item_id: UUID) -> tuple[Any, int] | Any:
         "category",
     }
     if set(payload) - allowed or "expectedVersion" not in payload:
-        return _error("invalid_request", "Draft item fields are invalid."), 400
+        return _error("invalid_request", "Các trường mục bản nháp không hợp lệ."), 400
     expected_version = payload["expectedVersion"]
     if not isinstance(expected_version, int) or isinstance(expected_version, bool) or expected_version < 1:
-        return _error("invalid_request", "expectedVersion must be a positive integer."), 400
+        return _error("invalid_request", "expectedVersion phải là số nguyên dương."), 400
     try:
         changes = _validated_item_changes(payload)
     except (ValueError, MoneyValidationError) as error:
@@ -314,7 +314,7 @@ def edit_draft_item(draft_id: UUID, item_id: UUID) -> tuple[Any, int] | Any:
             changes=changes,
         )
     except LookupError:
-        return _error("draft_item_not_found", "Draft item was not found."), 404
+        return _error("draft_item_not_found", "Không tìm thấy mục bản nháp."), 404
     except DraftConfirmationConflict as error:
         return _error("draft_item_conflict", str(error)), 409
     except ValueError as error:
@@ -322,7 +322,7 @@ def edit_draft_item(draft_id: UUID, item_id: UUID) -> tuple[Any, int] | Any:
     except SQLAlchemyError:
         database.rollback()
         current_app.logger.warning("Draft item update failed because the database operation failed")
-        return _error("service_unavailable", "Draft service is temporarily unavailable."), 503
+        return _error("service_unavailable", "Dịch vụ bản nháp tạm thời không khả dụng."), 503
     return jsonify(item=_serialize_item(item)), 200
 
 

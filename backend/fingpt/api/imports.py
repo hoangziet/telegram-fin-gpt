@@ -40,13 +40,13 @@ def upload_csv() -> tuple[Any, int] | Any:
     """Validate, privately store, and preview CSV rows without writing transactions."""
     request.max_content_length = MAX_MULTIPART_BYTES
     if request.mimetype != "multipart/form-data":
-        return _error("multipart_required", "Upload the CSV as a multipart form."), 415
+        return _error("multipart_required", "Tải tệp CSV lên bằng biểu mẫu multipart."), 415
     file = request.files.get("file")
     if file is None or not file.filename:
-        return _error("file_required", "Choose a CSV file."), 400
+        return _error("file_required", "Chọn một tệp CSV."), 400
     filename = secure_filename(file.filename)
     if not filename or len(filename) > 255 or not filename.lower().endswith(".csv"):
-        return _error("invalid_filename", "Choose a file with a .csv extension."), 422
+        return _error("invalid_filename", "Chọn tệp có phần mở rộng .csv."), 422
     raw_mapping = request.form.get("mapping")
     try:
         mapping = _parse_mapping(raw_mapping)
@@ -56,7 +56,7 @@ def upload_csv() -> tuple[Any, int] | Any:
         return _error("invalid_request", str(error)), 400
     content = file.stream.read(MAX_CSV_BYTES + 1)
     if len(content) > MAX_CSV_BYTES:
-        return _error("file_too_large", "CSV files must be 5 MiB or smaller."), 413
+        return _error("file_too_large", "Tệp CSV không được lớn hơn 5 MiB."), 413
 
     database: Session = g.database_session
     storage: PrivateEvidenceStorage = current_app.extensions["evidence_storage"]
@@ -86,11 +86,11 @@ def upload_csv() -> tuple[Any, int] | Any:
     except EvidenceStorageError:
         database.rollback()
         current_app.logger.warning("CSV evidence storage failed")
-        return _error("evidence_unavailable", "CSV evidence could not be stored."), 503
+        return _error("evidence_unavailable", "Không thể lưu chứng từ CSV."), 503
     except SQLAlchemyError:
         database.rollback()
         current_app.logger.warning("CSV import preview could not be persisted")
-        return _error("service_unavailable", "CSV import is temporarily unavailable."), 503
+        return _error("service_unavailable", "Nhập CSV tạm thời không khả dụng."), 503
     return jsonify(draft=_serialize_csv_draft(snapshot), replayed=replayed), 200 if replayed else 201
 
 
@@ -99,13 +99,13 @@ def upload_image() -> tuple[Any, int] | Any:
     """Extract one receipt total and return an owner-reviewable draft."""
     request.max_content_length = MAX_IMAGE_MULTIPART_BYTES
     if request.mimetype != "multipart/form-data":
-        return _error("multipart_required", "Upload the image as a multipart form."), 415
+        return _error("multipart_required", "Tải ảnh lên bằng biểu mẫu multipart."), 415
     file = request.files.get("file")
     if file is None or not file.filename:
-        return _error("file_required", "Choose an image file."), 400
+        return _error("file_required", "Chọn một tệp ảnh."), 400
     filename = secure_filename(file.filename)
     if not filename or len(filename) > 255:
-        return _error("invalid_filename", "Choose a valid image filename."), 422
+        return _error("invalid_filename", "Chọn tên tệp ảnh hợp lệ."), 422
     try:
         idempotency_key = str(UUID(request.headers.get("Idempotency-Key", "")))
         allow_duplicate = _parse_boolean(request.form.get("allowDuplicate", "false"))
@@ -113,11 +113,11 @@ def upload_image() -> tuple[Any, int] | Any:
         return _error("invalid_request", str(error)), 400
     content = file.stream.read(MAX_IMAGE_BYTES + 1)
     if len(content) > MAX_IMAGE_BYTES:
-        return _error("file_too_large", "Images must be 10 MiB or smaller."), 413
+        return _error("file_too_large", "Ảnh không được lớn hơn 10 MiB."), 413
 
     extractor = current_app.extensions.get("image_extractor")
     if extractor is None:
-        return _error("image_extraction_unavailable", "Image extraction is not configured."), 503
+        return _error("image_extraction_unavailable", "Trích xuất ảnh chưa được cấu hình."), 503
     database: Session = g.database_session
     storage: PrivateEvidenceStorage = current_app.extensions["evidence_storage"]
     try:
@@ -144,15 +144,15 @@ def upload_image() -> tuple[Any, int] | Any:
     except (ImageExtractionError, ImageInferenceError):
         database.rollback()
         current_app.logger.warning("Receipt image extraction was unavailable or malformed")
-        return _error("image_extraction_failed", "Receipt image could not be extracted."), 503
+        return _error("image_extraction_failed", "Không thể trích xuất ảnh hóa đơn."), 503
     except EvidenceStorageError:
         database.rollback()
         current_app.logger.warning("Image evidence storage failed")
-        return _error("evidence_unavailable", "Image evidence could not be stored."), 503
+        return _error("evidence_unavailable", "Không thể lưu chứng từ ảnh."), 503
     except SQLAlchemyError:
         database.rollback()
         current_app.logger.warning("Image draft could not be persisted")
-        return _error("service_unavailable", "Image import is temporarily unavailable."), 503
+        return _error("service_unavailable", "Nhập ảnh tạm thời không khả dụng."), 503
     return jsonify(draft=_serialize_image_draft(snapshot), replayed=replayed), 200 if replayed else 201
 
 
