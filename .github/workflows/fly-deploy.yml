@@ -1,0 +1,56 @@
+name: Deploy to Fly.io
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fingpt-fly-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: superfly/flyctl-actions/setup-flyctl@fc53c09e1bc3be6f6706953bd50c3a809c313de2 # v1.5
+      - name: Deploy the combined API/worker/web image
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FLY_API_TOKEN" ]]; then
+            echo 'FLY_API_TOKEN is not configured.' >&2
+            exit 1
+          fi
+          flyctl deploy --remote-only --wait-timeout 300
+      - name: Verify the deployed app is live
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          app_name=$(sed -n "s/^app = \"\(.*\)\"/\1/p" fly.toml | head -1)
+          curl --fail --silent --show-error \
+            --retry 6 --retry-delay 10 --retry-all-errors \
+            "https://${app_name}.fly.dev/health/live"
+      - name: Record the deployed URL
+        run: |
+          app_name=$(sed -n "s/^app = \"\(.*\)\"/\1/p" fly.toml | head -1)
+          {
+            echo "### Deployed to Fly.io"
+            echo "- URL: https://${app_name}.fly.dev/"
+            echo "- Commit: ${{ github.event.workflow_run.head_sha }}"
+          } >> "$GITHUB_STEP_SUMMARY"

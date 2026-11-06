@@ -1,0 +1,48 @@
+# Fly.io app config for the combined FinGPT API/web image (backend/Dockerfile).
+# App name is placeholder; create the real app first with `fly apps create <name>`
+# (or `fly launch --no-deploy` to pick one interactively) and update `app` below
+# to match before the first `fly deploy`.
+app = "wheremybucksgo-dev"
+primary_region = "sin"
+
+[build]
+  dockerfile = "backend/Dockerfile"
+
+[deploy]
+  release_command = "python -m alembic -c backend/alembic.ini upgrade head"
+
+[env]
+  FINGPT_DEPLOYMENT_ENV = "production"
+  FINGPT_EVIDENCE_STORAGE_MODE = "r2"
+  AUTH_COOKIE_SECURE = "true"
+
+[processes]
+  api = "gunicorn --bind=0.0.0.0:8080 --workers=2 --threads=4 fingpt:create_app()"
+  worker = "python -m fingpt.worker"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["api"]
+
+[[vm]]
+  processes = ["api"]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+[[vm]]
+  processes = ["worker"]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+[checks]
+  [checks.health]
+    type = "http"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    path = "/health/live"
+    processes = ["api"]
