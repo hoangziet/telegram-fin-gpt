@@ -1,16 +1,15 @@
-"""Private evidence storage adapters for local development and Azure Blob Storage."""
+"""Private evidence storage adapters for local development and R2."""
 
 from __future__ import annotations
 
 import os
 import re
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
-from azure.core.exceptions import AzureError
-from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient, ContentSettings
+import boto3  # type: ignore[import-untyped]
+from botocore.exceptions import BotoCoreError, ClientError  # type: ignore[import-untyped]
 
 
 class EvidenceStorageError(RuntimeError):
@@ -79,51 +78,71 @@ class FileSystemEvidenceStorage:
         return target
 
 
-class AzureBlobEvidenceStorage:
-    """Store private evidence in a pre-provisioned Azure Blob container."""
+class R2EvidenceStorage:
+    """Store private evidence in a pre-provisioned R2 bucket."""
 
-    def __init__(self, account_url: str, container_name: str) -> None:
-        """Use Azure's default credential chain for managed identity or local development."""
-        if not account_url.startswith("https://") or not container_name:
-            raise EvidenceStorageError("Azure evidence storage configuration is invalid.")
-        self._client = BlobServiceClient(account_url, credential=DefaultAzureCredential())
-        self._container_name = container_name
+    def __init__(
+        self,
+        account_id: str,
+        bucket: str,
+        access_key_id: str,
+        secret_access_key: str,
+        *,
+        client: Any | None = None,
+    ) -> None:
+        """Configure the S3-compatible client with an injectable test transport."""
+        if not all((account_id, bucket, access_key_id, secret_access_key)):
+            raise EvidenceStorageError("R2 evidence storage configuration is invalid.")
+        self._bucket = bucket
+        self._client = (
+            client
+            if client is not None
+            else boto3.client(
+                "s3",
+                endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+                aws_access_key_id=access_key_id,
+                aws_secret_access_key=secret_access_key,
+                region_name="auto",
+            )
+        )
 
     def save(self, *, user_id: UUID, evidence_id: UUID, data: bytes, media_type: str) -> str:
-        """Create a private blob without overwriting a previously stored object."""
+        """Create a private object under a generated owner-scoped key."""
         storage_key = _storage_key(user_id, evidence_id)
         try:
-            self._client.get_blob_client(self._container_name, storage_key).upload_blob(
-                data,
-                overwrite=False,
-                content_settings=ContentSettings(content_type=media_type),
-                metadata={"owner_id": str(user_id), "evidence_id": str(evidence_id)},
+            self._client.put_object(
+                Bucket=self._bucket,
+                Key=storage_key,
+                Body=data,
+                ContentType=media_type,
+                Metadata={"owner_id": str(user_id), "evidence_id": str(evidence_id)},
+                IfNoneMatch="*",
             )
-        except AzureError as error:
+        except (ClientError, BotoCoreError) as error:
             raise EvidenceStorageError("Evidence could not be stored.") from error
         return storage_key
 
     def read(self, storage_key: str) -> bytes:
-        """Download object bytes by private key without generating a public URL."""
-        if not _STORAGE_KEY.fullmatch(storage_key):
-            raise EvidenceStorageError("Evidence storage reference is invalid.")
+        """Read a validated private object without generating a public URL."""
+        _validate_storage_key(storage_key)
         try:
-            return self._client.get_blob_client(self._container_name, storage_key).download_blob().readall()
-        except AzureError as error:
+            return bytes(self._client.get_object(Bucket=self._bucket, Key=storage_key)["Body"].read())
+        except (ClientError, BotoCoreError) as error:
             raise EvidenceStorageError("Evidence could not be reopened.") from error
 
     def delete(self, storage_key: str) -> None:
-        """Delete a stored object by validated private key."""
-        if not _STORAGE_KEY.fullmatch(storage_key):
-            raise EvidenceStorageError("Evidence storage reference is invalid.")
+        """Delete a validated private object."""
+        _validate_storage_key(storage_key)
         try:
-            self._client.get_blob_client(self._container_name, storage_key).delete_blob(delete_snapshots="include")
-        except AzureError as error:
+            self._client.delete_object(Bucket=self._bucket, Key=storage_key)
+        except (ClientError, BotoCoreError) as error:
             raise EvidenceStorageError("Evidence could not be removed.") from error
 
-    def close(self) -> None:
-        """Release the Blob client and credential resources."""
-        self._client.close()
+
+def _validate_storage_key(storage_key: str) -> None:
+    """Reject user-supplied object paths."""
+    if not _STORAGE_KEY.fullmatch(storage_key):
+        raise EvidenceStorageError("Evidence storage reference is invalid.")
 
 
 _STORAGE_KEY = re.compile(r"^users/[0-9a-f-]{36}/evidence/[0-9a-f-]{36}$")
@@ -138,14 +157,16 @@ def create_evidence_storage(
     *,
     mode: str,
     local_root: str,
-    azure_account_url: str | None,
-    azure_container: str | None,
+    r2_account_id: str | None = None,
+    r2_bucket: str | None = None,
+    r2_access_key_id: str | None = None,
+    r2_secret_access_key: str | None = None,
 ) -> PrivateEvidenceStorage:
-    """Create the explicit local or private Azure evidence backend."""
+    """Create the explicit local or private R2 evidence backend."""
     if mode == "filesystem":
         return FileSystemEvidenceStorage(Path(local_root))
-    if mode == "azure":
-        if not azure_account_url or not azure_container:
-            raise EvidenceStorageConfigurationError("Azure evidence storage is not fully configured.")
-        return AzureBlobEvidenceStorage(azure_account_url, azure_container)
-    raise EvidenceStorageConfigurationError("Evidence storage mode must be filesystem or azure.")
+    if mode == "r2":
+        if not (r2_account_id and r2_bucket and r2_access_key_id and r2_secret_access_key):
+            raise EvidenceStorageConfigurationError("R2 evidence storage is not fully configured.")
+        return R2EvidenceStorage(r2_account_id, r2_bucket, r2_access_key_id, r2_secret_access_key)
+    raise EvidenceStorageConfigurationError("Evidence storage mode must be filesystem or r2.")

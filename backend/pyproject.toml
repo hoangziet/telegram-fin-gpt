@@ -10,9 +10,8 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.14,<2",
     "argon2-cffi>=23,<26",
-    "azure-identity>=1.19,<2",
-    "azure-servicebus>=7.14,<8",
-    "azure-storage-blob>=12.23,<13",
+    "anthropic>=0.70,<1",
+    "boto3>=1.35,<2",
     "Flask>=3.1,<4",
     "gunicorn>=23,<24",
     "psycopg[binary]>=3.2,<4",

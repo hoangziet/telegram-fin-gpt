@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from fingpt.adapters.foundry_insight import InsightInferenceError, _extract_text
-from fingpt.adapters.foundry_router import RouterInferenceError
+from fingpt.adapters.anthropic_insight import InsightInferenceError, _extract_text
+from fingpt.adapters.anthropic_router import RouterInferenceError
 from fingpt.services.chat_orchestration import ChatIntent, ChatOrchestrator, InsightSpecialist
 
 
@@ -103,12 +103,8 @@ _TREND = {
     ],
 )
 def test_insight_rejects_income_labels(sentence: str) -> None:
-    payload = {
-        "status": "completed",
-        "output": [{"type": "message", "content": [{"type": "output_text", "text": sentence}]}],
-    }
     with pytest.raises(InsightInferenceError, match="mislabeled spending"):
-        _extract_text(payload)
+        _extract_text(sentence)
 
 
 @pytest.mark.parametrize(
@@ -116,11 +112,7 @@ def test_insight_rejects_income_labels(sentence: str) -> None:
     ["Chi tiêu tăng 150%.", "Spending is up 150%.", "Spending for Incomer is up 150%."],
 )
 def test_insight_accepts_spending_without_income_word(sentence: str) -> None:
-    payload = {
-        "status": "completed",
-        "output": [{"type": "message", "content": [{"type": "output_text", "text": sentence}]}],
-    }
-    assert _extract_text(payload) == sentence
+    assert _extract_text(sentence) == sentence
 
 
 def test_insight_specialist_uses_narrator_output_when_available() -> None:

@@ -1,20 +1,28 @@
-"""At-least-once publication from the relational transactional outbox."""
+"""At-least-once processing from the relational transactional outbox."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from fingpt.adapters.service_bus import MessagePublisher, MessagePublishError
+from fingpt.adapters.telegram import TelegramDeliveryError
 from fingpt.persistence.models import OutboxMessage
+from fingpt.services.telegram_worker import PermanentMessageError
 
 MAX_PUBLISH_ATTEMPTS = 10
 
 
-def dispatch_outbox_batch(database: Session, publisher: MessagePublisher, *, limit: int = 20) -> int:
-    """Publish pending events and persist acknowledgement or retry state."""
+def process_outbox_batch(
+    database: Session,
+    handlers: dict[str, Callable[[Session, dict[str, object]], object]],
+    *,
+    limit: int = 20,
+) -> int:
+    """Process pending events with row locks and persist acknowledgement or retry state."""
     events = database.scalars(
         select(OutboxMessage)
         .where(OutboxMessage.status == "pending")
@@ -22,14 +30,24 @@ def dispatch_outbox_batch(database: Session, publisher: MessagePublisher, *, lim
         .limit(limit)
         .with_for_update(skip_locked=True)
     ).all()
-    published_count = 0
+    processed_count = 0
     for event in events:
+        handler = handlers.get(event.message_type)
+        if handler is None:
+            event.status = "failed"
+            event.attempt_count += 1
+            database.commit()
+            continue
         try:
-            publisher.publish(
-                event.deduplication_key,
-                {"eventType": event.message_type, **event.payload},
-            )
-        except MessagePublishError:
+            handler(database, {"eventType": event.message_type, **event.payload})
+        except PermanentMessageError:
+            database.rollback()
+            event.status = "failed"
+            event.attempt_count += 1
+            database.commit()
+            continue
+        except (SQLAlchemyError, TelegramDeliveryError):
+            database.rollback()
             event.attempt_count += 1
             if event.attempt_count >= MAX_PUBLISH_ATTEMPTS * (event.operator_retry_count + 1):
                 event.status = "failed"
@@ -39,5 +57,5 @@ def dispatch_outbox_batch(database: Session, publisher: MessagePublisher, *, lim
         event.status = "published"
         event.published_at = datetime.now(UTC)
         database.commit()
-        published_count += 1
-    return published_count
+        processed_count += 1
+    return processed_count

@@ -1,6 +1,6 @@
 """Deterministic spending-trend aggregation; no model call lives in this module.
 
-Every figure here comes straight from the database. `adapters/foundry_insight.py`
+Every figure here comes straight from the database. `adapters/anthropic_insight.py`
 may phrase these numbers into a sentence later, but it never computes or changes
 them, and this module never sends raw notes or evidence anywhere.
 """

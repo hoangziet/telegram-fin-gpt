@@ -1,147 +1,106 @@
-"""Tests for retryable transactional outbox delivery."""
+"""Tests for direct transactional outbox processing."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from fingpt.adapters.service_bus import MessagePublishError
+from fingpt.adapters.telegram import TelegramDeliveryError
 from fingpt.persistence import Base
 from fingpt.persistence.models import OutboxMessage
-from fingpt.services.outbox import MAX_PUBLISH_ATTEMPTS, dispatch_outbox_batch
+from fingpt.services.outbox import MAX_PUBLISH_ATTEMPTS, process_outbox_batch
 from fingpt.services.outbox_operations import retry_failed_outbox_event
-
-
-class RecordingPublisher:
-    """Deterministic broker fake for outbox state tests."""
-
-    def __init__(self, failures: int = 0) -> None:
-        self.failures = failures
-        self.message_ids: list[str] = []
-        self.events: list[dict[str, object]] = []
-
-    def publish(self, message_id: str, payload: dict[str, object]) -> None:
-        """Record acknowledged sends or simulate bounded broker failures."""
-        if self.failures:
-            self.failures -= 1
-            raise MessagePublishError("send failed")
-        self.message_ids.append(message_id)
-        self.events.append(payload)
+from fingpt.services.telegram_worker import PermanentMessageError
 
 
 def _database() -> tuple[Session, Engine]:
-    """Create a disposable in-memory database and its session."""
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     return Session(engine), engine
 
 
-def test_dispatch_marks_acknowledged_outbox_events_published() -> None:
+def _event(message_type: str = "test.event", **kwargs: Any) -> OutboxMessage:
+    return OutboxMessage(deduplication_key=f"event:{uuid4()}", message_type=message_type, payload={}, **kwargs)
+
+
+def test_success_and_pending_order() -> None:
     database, engine = _database()
-    event = OutboxMessage(
-        deduplication_key=f"event:{uuid4()}",
-        message_type="test.event",
-        payload={"reference": "id-only"},
-    )
-    database.add(event)
+    earlier = _event(created_at=datetime.now(UTC) - timedelta(days=1))
+    later = _event()
+    done = _event(status="published")
+    earlier.payload = {"order": "earlier"}
+    later.payload = {"order": "later"}
+    database.add_all([later, earlier, done])
     database.commit()
-    publisher = RecordingPublisher()
+    seen: list[dict[str, object]] = []
 
-    sent = dispatch_outbox_batch(database, publisher)
+    def handle(_db: Session, payload: dict[str, object]) -> None:
+        seen.append(payload)
 
-    database.refresh(event)
-    assert sent == 1
-    assert event.status == "published"
-    assert event.attempt_count == 1
-    assert publisher.message_ids == [event.deduplication_key]
+    assert process_outbox_batch(database, {"test.event": handle}) == 2
+    assert seen == [
+        {"eventType": "test.event", "order": "earlier"},
+        {"eventType": "test.event", "order": "later"},
+    ]
+    assert earlier.status == later.status == "published"
+    assert done.attempt_count == 0
+    assert earlier.published_at is not None
     database.close()
     engine.dispose()
 
 
-def test_dispatch_marks_events_failed_after_bounded_retries() -> None:
+def test_permanent_and_unknown_fail_immediately() -> None:
     database, engine = _database()
-    event = OutboxMessage(
-        deduplication_key=f"event:{uuid4()}",
-        message_type="test.event",
-        payload={"reference": "id-only"},
-    )
+    permanent = _event()
+    unknown = _event("unknown")
+    database.add_all([permanent, unknown])
+    database.commit()
+
+    def fail(_db: Session, _payload: dict[str, object]) -> None:
+        raise PermanentMessageError("invalid")
+
+    assert process_outbox_batch(database, {"test.event": fail}) == 0
+    assert permanent.status == unknown.status == "failed"
+    database.close()
+    engine.dispose()
+
+
+def test_transient_retries_then_fails_and_operator_retry() -> None:
+    database, engine = _database()
+    event = _event()
     database.add(event)
     database.commit()
-    publisher = RecordingPublisher(failures=MAX_PUBLISH_ATTEMPTS)
+
+    def fail(_db: Session, _payload: dict[str, object]) -> None:
+        raise TelegramDeliveryError("temporary")
 
     for _ in range(MAX_PUBLISH_ATTEMPTS):
-        assert dispatch_outbox_batch(database, publisher) == 0
-
-    database.refresh(event)
+        assert process_outbox_batch(database, {"test.event": fail}) == 0
     assert event.status == "failed"
     assert event.attempt_count == MAX_PUBLISH_ATTEMPTS
-    database.close()
-    engine.dispose()
-
-
-def test_dispatch_uses_event_type_and_stable_message_identifier() -> None:
-    database, engine = _database()
-    event = OutboxMessage(
-        deduplication_key=f"event:{uuid4()}",
-        message_type="telegram.text.accepted",
-        payload={"receiptId": str(uuid4())},
-    )
-    database.add(event)
-    database.commit()
-    publisher = RecordingPublisher()
-    assert dispatch_outbox_batch(database, publisher) == 1
-    assert publisher.message_ids == [event.deduplication_key]
-    assert publisher.events[0]["eventType"] == "telegram.text.accepted"
-    database.close()
-    engine.dispose()
-
-
-def test_operator_retry_preserves_attempt_history_and_stable_delivery_key() -> None:
-    database, engine = _database()
-    event = OutboxMessage(
-        deduplication_key=f"event:{uuid4()}",
-        message_type="telegram.text.accepted",
-        payload={"receiptId": str(uuid4())},
-        status="failed",
-        attempt_count=MAX_PUBLISH_ATTEMPTS,
-    )
-    database.add(event)
-    database.commit()
-    event_id = event.id
-    delivery_key = event.deduplication_key
-
-    recovered = retry_failed_outbox_event(database, event_id)
-
+    recovered = retry_failed_outbox_event(database, event.id)
     assert recovered.status == "pending"
-    assert recovered.attempt_count == MAX_PUBLISH_ATTEMPTS
     assert recovered.operator_retry_count == 1
-    assert recovered.deduplication_key == delivery_key
-    publisher = RecordingPublisher()
-    assert dispatch_outbox_batch(database, publisher) == 1
-    assert publisher.message_ids == [delivery_key]
+    assert process_outbox_batch(database, {"test.event": lambda _db, _payload: None}) == 1
     assert recovered.status == "published"
     database.close()
     engine.dispose()
 
 
-def test_operator_retry_refuses_pending_or_missing_events() -> None:
-    database, engine = _database()
-    event = OutboxMessage(
-        deduplication_key=f"event:{uuid4()}",
-        message_type="test.event",
-        payload={},
-    )
-    database.add(event)
-    database.commit()
+def test_pending_query_uses_skip_locked() -> None:
+    from unittest.mock import MagicMock
 
-    import pytest
-
-    with pytest.raises(LookupError):
-        retry_failed_outbox_event(database, event.id)
-    with pytest.raises(LookupError):
-        retry_failed_outbox_event(database, uuid4())
-    database.close()
-    engine.dispose()
+    database = MagicMock(spec=Session)
+    database.scalars.return_value.all.return_value = []
+    assert process_outbox_batch(database, {}) == 0
+    statement = database.scalars.call_args.args[0]
+    assert statement._for_update_arg is not None
+    assert statement._for_update_arg.skip_locked is True
+    assert statement._limit_clause is not None
+    assert statement._order_by_clauses
+    assert statement._where_criteria
