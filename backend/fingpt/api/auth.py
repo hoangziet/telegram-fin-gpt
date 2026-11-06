@@ -28,7 +28,7 @@ from fingpt.services.auth import (
 )
 
 AUTH_BLUEPRINT = Blueprint("auth", __name__, url_prefix="/api/auth")
-LOGIN_FAILURE = {"error": {"code": "invalid_credentials", "message": "Invalid username or password."}}
+LOGIN_FAILURE = {"error": {"code": "invalid_credentials", "message": "Tên đăng nhập hoặc mật khẩu không đúng."}}
 
 
 def register_auth(app: Flask) -> None:
@@ -71,18 +71,18 @@ def register_auth(app: Flask) -> None:
 def login() -> tuple[Any, int] | Any:
     """Verify credentials, enforce shared throttling, and issue a server session."""
     if not request.is_json:
-        return jsonify(error={"code": "json_required", "message": "Send a JSON request."}), 415
+        return jsonify(error={"code": "json_required", "message": "Gửi yêu cầu JSON."}), 415
 
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
-        return jsonify(error={"code": "invalid_request", "message": "Invalid request."}), 400
+        return jsonify(error={"code": "invalid_request", "message": "Yêu cầu không hợp lệ."}), 400
 
     secret_key: str = current_app.config["SECRET_KEY"]
     remote_address = request.remote_addr or "unknown"
     bucket_hash = login_bucket(secret_key, remote_address)
     now = datetime.now(UTC)
     if current_app.extensions.get("database_engine") is None:
-        return jsonify(error={"code": "auth_unavailable", "message": "Sign-in is temporarily unavailable."}), 503
+        return jsonify(error={"code": "auth_unavailable", "message": "Đăng nhập tạm thời không khả dụng."}), 503
     database = _database_session()
     hasher: PasswordHasher = current_app.extensions["password_hasher"]
     dummy_hash: str = current_app.extensions["dummy_password_hash"]
@@ -132,12 +132,12 @@ def login() -> tuple[Any, int] | Any:
                     user = None
     except SQLAlchemyError:
         current_app.logger.warning("Login attempt failed because the authentication store is unavailable")
-        return jsonify(error={"code": "auth_unavailable", "message": "Sign-in is temporarily unavailable."}), 503
+        return jsonify(error={"code": "auth_unavailable", "message": "Đăng nhập tạm thời không khả dụng."}), 503
     finally:
         database.close()
 
     if blocked_for is not None:
-        response = jsonify(error={"code": "too_many_attempts", "message": "Too many sign-in attempts."})
+        response = jsonify(error={"code": "too_many_attempts", "message": "Đã thử đăng nhập quá nhiều lần."})
         response.status_code = 429
         response.headers["Retry-After"] = str(blocked_for)
         return response
@@ -168,21 +168,21 @@ def change_password() -> tuple[Any, int]:
     """Verify the current password and update the authenticated owner's password."""
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
-        return _error("invalid_request", "Send currentPassword and newPassword as strings."), 400
+        return _error("invalid_request", "Gửi currentPassword và newPassword dưới dạng chuỗi."), 400
     current_password = body.get("currentPassword")
     new_password = body.get("newPassword")
     if not isinstance(current_password, str) or not isinstance(new_password, str):
-        return _error("invalid_request", "Send currentPassword and newPassword as strings."), 400
+        return _error("invalid_request", "Gửi currentPassword và newPassword dưới dạng chuỗi."), 400
 
     hasher: PasswordHasher = current_app.extensions["password_hasher"]
     user: User = g.auth_user
     if len(current_password) > 1024 or not verify_password(hasher, user.password_hash, current_password):
-        return _error("invalid_current_password", "Current password is incorrect."), 401
+        return _error("invalid_current_password", "Mật khẩu hiện tại không đúng."), 401
     reason = validate_password(new_password)
     if reason is not None:
         return _error("invalid_new_password", reason), 422
     if new_password == current_password:
-        return _error("invalid_new_password", "New password must differ from the current password."), 422
+        return _error("invalid_new_password", "Mật khẩu mới phải khác mật khẩu hiện tại."), 422
 
     database: Session = g.database_session
     try:
@@ -191,7 +191,7 @@ def change_password() -> tuple[Any, int]:
     except SQLAlchemyError:
         database.rollback()
         current_app.logger.warning("Password update failed because the authentication store is unavailable")
-        return _error("service_unavailable", "Service is unavailable."), 503
+        return _error("service_unavailable", "Dịch vụ không khả dụng."), 503
     return jsonify(status="updated"), 200
 
 

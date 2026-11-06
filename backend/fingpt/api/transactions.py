@@ -58,11 +58,11 @@ def list_transactions() -> tuple[Any, int] | Any:
     except ValueError as error:
         return jsonify(error={"code": "invalid_query", "message": str(error)}), 400
     if start_date and end_date and start_date > end_date:
-        return jsonify(error={"code": "invalid_query", "message": "from must not be after to."}), 400
+        return jsonify(error={"code": "invalid_query", "message": "from không được sau to."}), 400
     if kind not in {None, "income", "expense"}:
-        return jsonify(error={"code": "invalid_query", "message": "kind must be income or expense."}), 400
+        return jsonify(error={"code": "invalid_query", "message": "kind phải là income hoặc expense."}), 400
     if len(query) > 128:
-        return jsonify(error={"code": "invalid_query", "message": "q must be 128 characters or fewer."}), 400
+        return jsonify(error={"code": "invalid_query", "message": "q không được quá 128 ký tự."}), 400
 
     database: Session = g.database_session
     try:
@@ -79,7 +79,7 @@ def list_transactions() -> tuple[Any, int] | Any:
         )
     except SQLAlchemyError:
         current_app.logger.warning("Transaction search failed because the database operation failed")
-        return jsonify(error={"code": "service_unavailable", "message": "Search is temporarily unavailable."}), 503
+        return jsonify(error={"code": "service_unavailable", "message": "Tìm kiếm tạm thời không khả dụng."}), 503
     return jsonify(
         items=[_serialize_transaction(item) for item in items], total=total, limit=limit, offset=offset
     ), 200
@@ -97,11 +97,15 @@ def report_totals() -> tuple[Any, int] | Any:
         return jsonify(error={"code": "invalid_query", "message": str(error)}), 400
     assert start_date is not None and end_date is not None
     if start_date > end_date:
-        return jsonify(error={"code": "invalid_query", "message": "from must not be after to."}), 400
+        return jsonify(error={"code": "invalid_query", "message": "from không được sau to."}), 400
     if (end_date - start_date).days > 366:
-        return jsonify(error={"code": "invalid_query", "message": "Report range must not exceed 367 days."}), 400
+        return jsonify(
+            error={"code": "invalid_query", "message": "Khoảng thời gian báo cáo không được quá 367 ngày."}
+        ), 400
     if kind not in {None, "income", "expense"} or len(query) > 128:
-        return jsonify(error={"code": "invalid_query", "message": "Invalid kind or search query."}), 400
+        return jsonify(
+            error={"code": "invalid_query", "message": "Loại giao dịch hoặc truy vấn tìm kiếm không hợp lệ."}
+        ), 400
     database: Session = g.database_session
     try:
         totals = transaction_totals(
@@ -114,7 +118,7 @@ def report_totals() -> tuple[Any, int] | Any:
         )
     except SQLAlchemyError:
         current_app.logger.warning("Transaction report failed because the database operation failed")
-        return jsonify(error={"code": "service_unavailable", "message": "Report is temporarily unavailable."}), 503
+        return jsonify(error={"code": "service_unavailable", "message": "Báo cáo tạm thời không khả dụng."}), 503
     return jsonify(
         fromDate=start_date.isoformat(),
         toDate=end_date.isoformat(),
@@ -132,22 +136,22 @@ def transaction_evidence(transaction_id: UUID) -> tuple[Any, int] | Any:
         select(Transaction).where(Transaction.id == transaction_id, Transaction.user_id == g.auth_user.id)
     )
     if transaction is None:
-        return jsonify(error={"code": "transaction_not_found", "message": "Transaction was not found."}), 404
+        return jsonify(error={"code": "transaction_not_found", "message": "Không tìm thấy giao dịch."}), 404
     draft_item = database.scalar(
         select(DraftItem).where(DraftItem.id == transaction.draft_item_id, DraftItem.user_id == g.auth_user.id)
     )
     if draft_item is None:
         current_app.logger.error("Transaction evidence references are inconsistent")
-        return jsonify(error={"code": "evidence_unavailable", "message": "Evidence is unavailable."}), 503
+        return jsonify(error={"code": "evidence_unavailable", "message": "Chứng từ không khả dụng."}), 503
     draft = database.scalar(select(Draft).where(Draft.id == draft_item.draft_id, Draft.user_id == g.auth_user.id))
     if draft is None:
         current_app.logger.error("Transaction evidence references are inconsistent")
-        return jsonify(error={"code": "evidence_unavailable", "message": "Evidence is unavailable."}), 503
+        return jsonify(error={"code": "evidence_unavailable", "message": "Chứng từ không khả dụng."}), 503
     evidence = database.scalar(
         select(Evidence).where(Evidence.id == draft.evidence_id, Evidence.user_id == g.auth_user.id)
     )
     if evidence is None:
-        return jsonify(error={"code": "evidence_unavailable", "message": "Evidence is unavailable."}), 503
+        return jsonify(error={"code": "evidence_unavailable", "message": "Chứng từ không khả dụng."}), 503
     return jsonify(
         evidence={
             "id": str(evidence.id),
@@ -168,18 +172,18 @@ def transaction_evidence_content(transaction_id: UUID) -> tuple[Any, int] | Any:
     database: Session = g.database_session
     evidence = _owned_transaction_evidence(database, g.auth_user.id, transaction_id)
     if evidence is None:
-        return jsonify(error={"code": "transaction_not_found", "message": "Transaction was not found."}), 404
+        return jsonify(error={"code": "transaction_not_found", "message": "Không tìm thấy giao dịch."}), 404
     if evidence.storage_key is None or evidence.source_type not in {"image", "csv"}:
-        return jsonify(error={"code": "evidence_content_unavailable", "message": "File evidence is unavailable."}), 404
+        return jsonify(error={"code": "evidence_content_unavailable", "message": "Tệp chứng từ không khả dụng."}), 404
     storage: PrivateEvidenceStorage = current_app.extensions["evidence_storage"]
     try:
         content = storage.read(evidence.storage_key)
     except EvidenceStorageError:
         current_app.logger.warning("Private transaction evidence could not be reopened")
-        return jsonify(error={"code": "evidence_unavailable", "message": "Evidence is unavailable."}), 503
+        return jsonify(error={"code": "evidence_unavailable", "message": "Chứng từ không khả dụng."}), 503
     media_type = evidence.media_type
     if media_type not in {"image/jpeg", "image/png", "image/webp", "text/csv"}:
-        return jsonify(error={"code": "evidence_unavailable", "message": "Evidence type is unavailable."}), 503
+        return jsonify(error={"code": "evidence_unavailable", "message": "Loại chứng từ không khả dụng."}), 503
     filename = secure_filename(evidence.original_filename or "evidence") or "evidence"
     response = send_file(
         BytesIO(content),
@@ -220,7 +224,7 @@ def transaction_revisions(transaction_id: UUID) -> tuple[Any, int] | Any:
         select(Transaction.id).where(Transaction.id == transaction_id, Transaction.user_id == g.auth_user.id)
     )
     if transaction is None:
-        return jsonify(error={"code": "transaction_not_found", "message": "Transaction was not found."}), 404
+        return jsonify(error={"code": "transaction_not_found", "message": "Không tìm thấy giao dịch."}), 404
     revisions = database.scalars(
         select(TransactionRevision)
         .where(
@@ -252,7 +256,7 @@ def list_transaction_changes(transaction_id: UUID) -> tuple[Any, int] | Any:
         select(Transaction.id).where(Transaction.id == transaction_id, Transaction.user_id == g.auth_user.id)
     )
     if owned is None:
-        return jsonify(error={"code": "transaction_not_found", "message": "Transaction was not found."}), 404
+        return jsonify(error={"code": "transaction_not_found", "message": "Không tìm thấy giao dịch."}), 404
     try:
         limit = _bounded_integer("limit", default=20, minimum=1, maximum=100)
         offset = _bounded_integer("offset", default=0, minimum=0, maximum=10_000)
@@ -322,16 +326,16 @@ def propose_change(transaction_id: UUID) -> tuple[Any, int] | Any:
     """Create a durable preview for an edit or soft delete."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or "expectedVersion" not in payload or "action" not in payload:
-        return jsonify(error={"code": "invalid_request", "message": "action and expectedVersion are required."}), 400
+        return jsonify(error={"code": "invalid_request", "message": "Cần có action và expectedVersion."}), 400
     action = payload["action"]
     expected_version = payload["expectedVersion"]
     if action not in {"updated", "deleted"}:
-        return jsonify(error={"code": "invalid_request", "message": "action must be updated or deleted."}), 400
+        return jsonify(error={"code": "invalid_request", "message": "action phải là updated hoặc deleted."}), 400
     if not isinstance(expected_version, int) or isinstance(expected_version, bool) or expected_version < 1:
-        return jsonify(error={"code": "invalid_request", "message": "expectedVersion must be positive."}), 400
+        return jsonify(error={"code": "invalid_request", "message": "expectedVersion phải là số dương."}), 400
     key = _idempotency_key()
     if key is None:
-        return jsonify(error={"code": "invalid_idempotency_key", "message": "Send a UUID idempotency key."}), 400
+        return jsonify(error={"code": "invalid_idempotency_key", "message": "Gửi khóa idempotency dạng UUID."}), 400
     allowed_fields = (
         {"action", "expectedVersion"}
         if action == "deleted"
@@ -349,7 +353,7 @@ def propose_change(transaction_id: UUID) -> tuple[Any, int] | Any:
         }
     )
     if set(payload) - allowed_fields or (action == "updated" and set(payload) <= {"action", "expectedVersion"}):
-        return jsonify(error={"code": "invalid_request", "message": "Change fields are invalid."}), 400
+        return jsonify(error={"code": "invalid_request", "message": "Các trường thay đổi không hợp lệ."}), 400
     try:
         changes = _validated_change_fields(payload)
         proposal, replayed = create_change_proposal(
@@ -364,12 +368,12 @@ def propose_change(transaction_id: UUID) -> tuple[Any, int] | Any:
     except (ValueError, MoneyValidationError) as error:
         return jsonify(error={"code": "invalid_change", "message": str(error)}), 422
     except LookupError:
-        return jsonify(error={"code": "transaction_not_found", "message": "Transaction was not found."}), 404
+        return jsonify(error={"code": "transaction_not_found", "message": "Không tìm thấy giao dịch."}), 404
     except DraftConfirmationConflict as error:
         return jsonify(error={"code": "change_conflict", "message": str(error)}), 409
     except SQLAlchemyError:
         current_app.logger.warning("Transaction change proposal failed because the database operation failed")
-        return jsonify(error={"code": "service_unavailable", "message": "Proposal service is unavailable."}), 503
+        return jsonify(error={"code": "service_unavailable", "message": "Dịch vụ đề xuất không khả dụng."}), 503
     return jsonify(change=_serialize_change(proposal), replayed=replayed), 200 if replayed else 201
 
 
@@ -378,13 +382,13 @@ def propose_undo(transaction_id: UUID) -> tuple[Any, int] | Any:
     """Preview an inverse operation from the latest immutable revision."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or set(payload) != {"expectedVersion"}:
-        return jsonify(error={"code": "invalid_request", "message": "Send expectedVersion."}), 400
+        return jsonify(error={"code": "invalid_request", "message": "Gửi expectedVersion."}), 400
     expected_version = payload["expectedVersion"]
     if not isinstance(expected_version, int) or isinstance(expected_version, bool) or expected_version < 1:
-        return jsonify(error={"code": "invalid_request", "message": "expectedVersion must be positive."}), 400
+        return jsonify(error={"code": "invalid_request", "message": "expectedVersion phải là số dương."}), 400
     key = _idempotency_key()
     if key is None:
-        return jsonify(error={"code": "invalid_idempotency_key", "message": "Send a UUID idempotency key."}), 400
+        return jsonify(error={"code": "invalid_idempotency_key", "message": "Gửi khóa idempotency dạng UUID."}), 400
     try:
         proposal, replayed = create_change_proposal(
             g.database_session,
@@ -398,10 +402,10 @@ def propose_undo(transaction_id: UUID) -> tuple[Any, int] | Any:
     except ValueError as error:
         return jsonify(error={"code": "undo_conflict", "message": str(error)}), 409
     except LookupError:
-        return jsonify(error={"code": "transaction_not_found", "message": "Transaction was not found."}), 404
+        return jsonify(error={"code": "transaction_not_found", "message": "Không tìm thấy giao dịch."}), 404
     except SQLAlchemyError:
         current_app.logger.warning("Undo proposal failed because the database operation failed")
-        return jsonify(error={"code": "service_unavailable", "message": "Undo service is unavailable."}), 503
+        return jsonify(error={"code": "service_unavailable", "message": "Dịch vụ hoàn tác không khả dụng."}), 503
     return jsonify(change=_serialize_change(proposal), replayed=replayed), 200 if replayed else 201
 
 
@@ -410,7 +414,7 @@ def get_change_preview(change_id: UUID) -> tuple[Any, int] | Any:
     """Read a proposed change only for the user who created it."""
     proposal = get_change(g.database_session, g.auth_user.id, change_id)
     if proposal is None:
-        return jsonify(error={"code": "change_not_found", "message": "Change proposal was not found."}), 404
+        return jsonify(error={"code": "change_not_found", "message": "Không tìm thấy đề xuất thay đổi."}), 404
     return jsonify(change=_serialize_change(proposal)), 200
 
 
@@ -419,13 +423,13 @@ def confirm_proposed_change(change_id: UUID) -> tuple[Any, int] | Any:
     """Apply an explicitly confirmed edit/delete/undo proposal."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or set(payload) != {"expectedVersion"}:
-        return jsonify(error={"code": "invalid_request", "message": "Send expectedVersion."}), 400
+        return jsonify(error={"code": "invalid_request", "message": "Gửi expectedVersion."}), 400
     expected_version = payload["expectedVersion"]
     if not isinstance(expected_version, int) or isinstance(expected_version, bool) or expected_version < 1:
-        return jsonify(error={"code": "invalid_request", "message": "expectedVersion must be positive."}), 400
+        return jsonify(error={"code": "invalid_request", "message": "expectedVersion phải là số dương."}), 400
     key = _idempotency_key()
     if key is None:
-        return jsonify(error={"code": "invalid_idempotency_key", "message": "Send a UUID idempotency key."}), 400
+        return jsonify(error={"code": "invalid_idempotency_key", "message": "Gửi khóa idempotency dạng UUID."}), 400
     try:
         transaction, proposal, replayed = confirm_change(
             g.database_session,
@@ -435,13 +439,13 @@ def confirm_proposed_change(change_id: UUID) -> tuple[Any, int] | Any:
             confirmation_key=key,
         )
     except LookupError:
-        return jsonify(error={"code": "change_not_found", "message": "Change proposal was not found."}), 404
+        return jsonify(error={"code": "change_not_found", "message": "Không tìm thấy đề xuất thay đổi."}), 404
     except DraftConfirmationConflict as error:
         return jsonify(error={"code": "change_conflict", "message": str(error)}), 409
     except SQLAlchemyError:
         g.database_session.rollback()
         current_app.logger.warning("Transaction change confirmation failed because the database operation failed")
-        return jsonify(error={"code": "service_unavailable", "message": "Confirmation service is unavailable."}), 503
+        return jsonify(error={"code": "service_unavailable", "message": "Dịch vụ xác nhận không khả dụng."}), 503
     return jsonify(
         transaction=_serialize_transaction(transaction),
         change=_serialize_change(proposal),
@@ -454,10 +458,10 @@ def cancel_proposed_change(change_id: UUID) -> tuple[Any, int] | Any:
     """Cancel a pending preview idempotently at its current version."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or set(payload) != {"expectedVersion"}:
-        return jsonify(error={"code": "invalid_request", "message": "Send expectedVersion."}), 400
+        return jsonify(error={"code": "invalid_request", "message": "Gửi expectedVersion."}), 400
     expected_version = payload["expectedVersion"]
     if not isinstance(expected_version, int) or isinstance(expected_version, bool) or expected_version < 1:
-        return jsonify(error={"code": "invalid_request", "message": "expectedVersion must be positive."}), 400
+        return jsonify(error={"code": "invalid_request", "message": "expectedVersion phải là số dương."}), 400
     try:
         change, replayed = cancel_change(
             g.database_session,
@@ -466,13 +470,13 @@ def cancel_proposed_change(change_id: UUID) -> tuple[Any, int] | Any:
             expected_version=expected_version,
         )
     except LookupError:
-        return jsonify(error={"code": "change_not_found", "message": "Change proposal was not found."}), 404
+        return jsonify(error={"code": "change_not_found", "message": "Không tìm thấy đề xuất thay đổi."}), 404
     except DraftConfirmationConflict as error:
         return jsonify(error={"code": "change_conflict", "message": str(error)}), 409
     except SQLAlchemyError:
         g.database_session.rollback()
         current_app.logger.warning("Transaction change cancellation failed because the database operation failed")
-        return jsonify(error={"code": "service_unavailable", "message": "Cancellation service is unavailable."}), 503
+        return jsonify(error={"code": "service_unavailable", "message": "Dịch vụ hủy không khả dụng."}), 503
     return jsonify(change=_serialize_change(change), replayed=replayed), 200
 
 
